@@ -50,4 +50,4 @@ Alternatively, you can add the package to your project's `Packages/manifest.json
 
 ## License
 
-Please check the repository for license information.
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
