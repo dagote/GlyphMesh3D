@@ -1,6 +1,6 @@
 {
   "name": "com.lanternpines.glyphmesh3d",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "displayName": "GlyphMesh3D",
   "description": "A Unity package for 3D glyph mesh generation and manipulation",
   "unity": "2020.3",
