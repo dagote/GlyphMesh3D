@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using TriangleNet;
@@ -179,14 +179,12 @@ public class GlyphText3D : MonoBehaviour
     [SerializeField] private TMP_FontAsset fontAsset;
     [SerializeField] private string text = "Sample Text";
 
-    [Header("Mesh Settings")]
+    [Header("Extrusion Settings")]
     [Range(0f, 100f)]
     [SerializeField] private float extrusionDepth = 20f;
-
-    [Header("Extrusion Curve Settings")]
     [Range(0f, 50f)]
     [Tooltip("Controls the width of the extrusion offset perpendicular to the boundary")]
-    [SerializeField] private float extrusionWidth = 1f;
+    [SerializeField] private float extrusionWidth = 0f;
 
     [Tooltip("Curve controls perpendicular offset progression (X: 0-1 depth, Y: 0-1 offset strength). Keyframe count determines extrusion layer count.")]
     [SerializeField] internal ExtrusionProfileCurve extrusionProfile = new ExtrusionProfileCurve();
@@ -311,38 +309,26 @@ public class GlyphText3D : MonoBehaviour
 
     internal void RegenerateMesh()
     {
-        // Ensure components are initialized before mesh generation
-        InitializeComponents();
-
-        Debug.Log($"[GlyphText3D.RegenerateMesh] Starting - Text: '{text}', Font: {(ActiveFontAsset != null ? ActiveFontAsset.name : "NULL")}");
-
         // Safety checks
         if (ActiveFontAsset == null)
         {
-            Debug.LogWarning("[GlyphText3D.RegenerateMesh] Font asset is null, clearing mesh");
             ClearMesh();
             return;
         }
 
         if (string.IsNullOrEmpty(text))
         {
-            Debug.LogWarning("[GlyphText3D.RegenerateMesh] Text is empty, clearing mesh");
             ClearMesh();
             return;
         }
 
         try
         {
-            Debug.Log("[GlyphText3D.RegenerateMesh] Generating mesh for text");
             GenerateMeshForText();
             previousText = text;
-            Debug.Log("[GlyphText3D.RegenerateMesh] Mesh generation successful");
-
-            // The generator will not overwrite the renderer's sharedMaterials by default.
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"GlyphText3D: Failed to generate mesh: {ex.Message}\n{ex.StackTrace}", this);
             ClearMesh();
         }
     }
@@ -495,7 +481,6 @@ public class GlyphText3D : MonoBehaviour
 
                 // Apply materials to renderer only when explicitly requested (auto assignment is deprecated)
                 // User-managed material assignment: manual control only. No automatic assignment.
-                // Debugging/logging removed per user request
             }
         }
         else
@@ -546,9 +531,8 @@ public class GlyphText3D : MonoBehaviour
             DestroyImmediate(readable);
             return edgePixels;
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"GlyphText3D: Failed to extract edge pixels: {ex.Message}", this);
             return new List<Vector2Int>();
         }
     }
@@ -888,7 +872,6 @@ public class GlyphText3D : MonoBehaviour
             work = outPts;
             if (work.Count > 10000)
             {
-                Debug.LogWarning("Smoothing exceeded 10000 points, stopping early");
                 break;
             }
         }
@@ -917,7 +900,6 @@ public class GlyphText3D : MonoBehaviour
             work = outPts;
             if (work.Count > 10000)
             {
-                Debug.LogWarning("Smoothing exceeded 10000 points, stopping early");
                 break;
             }
         }
@@ -1098,9 +1080,8 @@ public class GlyphText3D : MonoBehaviour
                 submeshData[faceMat].Add(triangles[i] + vertexOffset);
             }
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"GlyphText3D: Triangulation failed: {ex.Message}", this);
         }
     }
 
@@ -1218,57 +1199,53 @@ public class GlyphText3D : MonoBehaviour
 
             // Get face material from slot 0
             Material faceMat = slotMap.FaceSlot < rendererMaterials.Length ? rendererMaterials[slotMap.FaceSlot] : null;
+
             Material frontMat = faceMat;
+            if (!localSubmeshData.ContainsKey(frontMat))
+                localSubmeshData[frontMat] = new List<int>();
 
-            // Only generate face triangles if we have a valid material
-            if (faceMat != null)
+            foreach (var t in triMesh.Triangles)
             {
-                if (!localSubmeshData.ContainsKey(frontMat))
-                    localSubmeshData[frontMat] = new List<int>();
+                var v0 = t.GetVertex(0);
+                var v1 = t.GetVertex(1);
+                var v2 = t.GetVertex(2);
 
-                foreach (var t in triMesh.Triangles)
+                long id0 = GetDeterministicVertexId(v0.X, v0.Y);
+                long id1 = GetDeterministicVertexId(v1.X, v1.Y);
+                long id2 = GetDeterministicVertexId(v2.X, v2.Y);
+
+                var frontMap = layerVertexMaps[0];
+                if (frontMap.ContainsKey(id0) && frontMap.ContainsKey(id1) && frontMap.ContainsKey(id2))
                 {
-                    var v0 = t.GetVertex(0);
-                    var v1 = t.GetVertex(1);
-                    var v2 = t.GetVertex(2);
-
-                    long id0 = GetDeterministicVertexId(v0.X, v0.Y);
-                    long id1 = GetDeterministicVertexId(v1.X, v1.Y);
-                    long id2 = GetDeterministicVertexId(v2.X, v2.Y);
-
-                    var frontMap = layerVertexMaps[0];
-                    if (frontMap.ContainsKey(id0) && frontMap.ContainsKey(id1) && frontMap.ContainsKey(id2))
-                    {
-                        // Reversed winding for front face (normal points back toward camera)
-                        localSubmeshData[frontMat].Add(frontMap[id2]);
-                        localSubmeshData[frontMat].Add(frontMap[id1]);
-                        localSubmeshData[frontMat].Add(frontMap[id0]);
-                    }
+                    // Reversed winding for front face (normal points back toward camera)
+                    localSubmeshData[frontMat].Add(frontMap[id2]);
+                    localSubmeshData[frontMat].Add(frontMap[id1]);
+                    localSubmeshData[frontMat].Add(frontMap[id0]);
                 }
+            }
 
-                // Back face triangles - use front material (no back slot)
-                Material backMat = frontMat;
-                if (!localSubmeshData.ContainsKey(backMat))
-                    localSubmeshData[backMat] = new List<int>();
+            // Back face triangles - use front material (no back slot)
+            Material backMat = frontMat;
+            if (!localSubmeshData.ContainsKey(backMat))
+                localSubmeshData[backMat] = new List<int>();
 
-                foreach (var t in triMesh.Triangles)
+            foreach (var t in triMesh.Triangles)
+            {
+                var v0 = t.GetVertex(0);
+                var v1 = t.GetVertex(1);
+                var v2 = t.GetVertex(2);
+
+                long id0 = GetDeterministicVertexId(v0.X, v0.Y);
+                long id1 = GetDeterministicVertexId(v1.X, v1.Y);
+                long id2 = GetDeterministicVertexId(v2.X, v2.Y);
+
+                var backMap = layerVertexMaps[layerVertexMaps.Count - 1];
+                if (backMap.ContainsKey(id0) && backMap.ContainsKey(id1) && backMap.ContainsKey(id2))
                 {
-                    var v0 = t.GetVertex(0);
-                    var v1 = t.GetVertex(1);
-                    var v2 = t.GetVertex(2);
-
-                    long id0 = GetDeterministicVertexId(v0.X, v0.Y);
-                    long id1 = GetDeterministicVertexId(v1.X, v1.Y);
-                    long id2 = GetDeterministicVertexId(v2.X, v2.Y);
-
-                    var backMap = layerVertexMaps[layerVertexMaps.Count - 1];
-                    if (backMap.ContainsKey(id0) && backMap.ContainsKey(id1) && backMap.ContainsKey(id2))
-                    {
-                        // Normal winding for back face (normal points forward away from camera)
-                        localSubmeshData[backMat].Add(backMap[id0]);
-                        localSubmeshData[backMat].Add(backMap[id1]);
-                        localSubmeshData[backMat].Add(backMap[id2]);
-                    }
+                    // Normal winding for back face (normal points forward away from camera)
+                    localSubmeshData[backMat].Add(backMap[id0]);
+                    localSubmeshData[backMat].Add(backMap[id1]);
+                    localSubmeshData[backMat].Add(backMap[id2]);
                 }
             }
 
@@ -1336,34 +1313,30 @@ public class GlyphText3D : MonoBehaviour
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < rendererMaterials.Length ? rendererMaterials[bandSlotIndex] : frontMat;
 
+                        if (!localSubmeshData.ContainsKey(layerMat))
+                            localSubmeshData[layerMat] = new List<int>();
+
                         Vector2 edge = (p1 - p0).normalized;
                         Vector3 edgeNormal = new Vector3(edge.y, -edge.x, 0f).normalized;
 
-                        // Only generate band triangles if we have a valid material
-                        if (layerMat != null)
+                        // Reversed winding for positive Z extrusion direction
+                        if (isHole)
                         {
-                            if (!localSubmeshData.ContainsKey(layerMat))
-                                localSubmeshData[layerMat] = new List<int>();
-
-                            // Reversed winding for positive Z extrusion direction
-                            if (isHole)
-                            {
-                                localSubmeshData[layerMat].Add(curr0);
-                                localSubmeshData[layerMat].Add(next1);
-                                localSubmeshData[layerMat].Add(curr1);
-                                localSubmeshData[layerMat].Add(curr0);
-                                localSubmeshData[layerMat].Add(next0);
-                                localSubmeshData[layerMat].Add(next1);
-                            }
-                            else
-                            {
-                                localSubmeshData[layerMat].Add(curr0);
-                                localSubmeshData[layerMat].Add(curr1);
-                                localSubmeshData[layerMat].Add(next1);
-                                localSubmeshData[layerMat].Add(curr0);
-                                localSubmeshData[layerMat].Add(next1);
-                                localSubmeshData[layerMat].Add(next0);
-                            }
+                            localSubmeshData[layerMat].Add(curr0);
+                            localSubmeshData[layerMat].Add(next1);
+                            localSubmeshData[layerMat].Add(curr1);
+                            localSubmeshData[layerMat].Add(curr0);
+                            localSubmeshData[layerMat].Add(next0);
+                            localSubmeshData[layerMat].Add(next1);
+                        }
+                        else
+                        {
+                            localSubmeshData[layerMat].Add(curr0);
+                            localSubmeshData[layerMat].Add(curr1);
+                            localSubmeshData[layerMat].Add(next1);
+                            localSubmeshData[layerMat].Add(curr0);
+                            localSubmeshData[layerMat].Add(next1);
+                            localSubmeshData[layerMat].Add(next0);
                         }
 
                         Vector2 midpoint = (p0 + p1) / 2f;
@@ -1398,9 +1371,8 @@ public class GlyphText3D : MonoBehaviour
                 }
             }
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Debug.LogError($"GlyphText3D: Curved mesh generation failed: {ex.Message}\n{ex.StackTrace}", this);
         }
     }
 
@@ -1496,14 +1468,82 @@ public class GlyphText3D : MonoBehaviour
         if (meshRenderer == null) InitializeComponents();
         if (meshRenderer == null) return;
         Material[] existing = meshRenderer.sharedMaterials ?? new Material[0];
-        if (existing.Length == desiredSlots) return;
 
         Material[] resized = new Material[desiredSlots];
+
+        // Get default material based on render pipeline
+        Material defaultMat = GetDefaultMaterial();
+
         for (int i = 0; i < desiredSlots; i++)
         {
-            resized[i] = i < existing.Length ? existing[i] : (i > 0 ? resized[i - 1] : null);
+            if (i < existing.Length && existing[i] != null)
+            {
+                resized[i] = existing[i];
+            }
+            else if (i > 0 && resized[i - 1] != null)
+            {
+                resized[i] = resized[i - 1];
+            }
+            else
+            {
+                resized[i] = defaultMat;
+            }
         }
         meshRenderer.sharedMaterials = resized;
+    }
+
+    // Cache for default material to ensure we use the same instance
+    private static Material cachedDefaultMaterial;
+
+    /// <summary>
+    /// Get appropriate default material based on the current render pipeline
+    /// </summary>
+    private Material GetDefaultMaterial()
+    {
+        // Return cached material if it exists and is still valid
+        if (cachedDefaultMaterial != null)
+            return cachedDefaultMaterial;
+
+        Material defaultMat = null;
+
+        // Check for URP/HDRP
+        var renderPipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+        if (renderPipelineAsset != null)
+        {
+            string pipelineName = renderPipelineAsset.GetType().Name;
+
+            if (pipelineName.Contains("Universal"))
+            {
+                // URP
+                var shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null) shader = Shader.Find("Lightweight Render Pipeline/Lit"); // Older URP
+                if (shader != null) defaultMat = new Material(shader);
+            }
+            else if (pipelineName.Contains("HDRenderPipeline"))
+            {
+                // HDRP  
+                var shader = Shader.Find("HDRP/Lit");
+                if (shader != null) defaultMat = new Material(shader);
+            }
+        }
+
+        // Fall back to built-in pipeline
+        if (defaultMat == null)
+        {
+            var shader = Shader.Find("Standard");
+            if (shader == null) shader = Shader.Find("Diffuse"); // Ultimate fallback
+            if (shader != null) defaultMat = new Material(shader);
+        }
+
+        // If we still don't have a material, create one with error shader
+        if (defaultMat == null)
+        {
+            defaultMat = new Material(Shader.Find("Hidden/InternalErrorShader"));
+        }
+
+        // Cache the material for reuse
+        cachedDefaultMaterial = defaultMat;
+        return defaultMat;
     }
 }
 
