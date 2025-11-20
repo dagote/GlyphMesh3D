@@ -1215,53 +1215,57 @@ public class GlyphText3D : MonoBehaviour
 
             // Get face material from slot 0
             Material faceMat = slotMap.FaceSlot < rendererMaterials.Length ? rendererMaterials[slotMap.FaceSlot] : null;
-
             Material frontMat = faceMat;
-            if (!localSubmeshData.ContainsKey(frontMat))
-                localSubmeshData[frontMat] = new List<int>();
 
-            foreach (var t in triMesh.Triangles)
+            // Only generate face triangles if we have a valid material
+            if (faceMat != null)
             {
-                var v0 = t.GetVertex(0);
-                var v1 = t.GetVertex(1);
-                var v2 = t.GetVertex(2);
+                if (!localSubmeshData.ContainsKey(frontMat))
+                    localSubmeshData[frontMat] = new List<int>();
 
-                long id0 = GetDeterministicVertexId(v0.X, v0.Y);
-                long id1 = GetDeterministicVertexId(v1.X, v1.Y);
-                long id2 = GetDeterministicVertexId(v2.X, v2.Y);
-
-                var frontMap = layerVertexMaps[0];
-                if (frontMap.ContainsKey(id0) && frontMap.ContainsKey(id1) && frontMap.ContainsKey(id2))
+                foreach (var t in triMesh.Triangles)
                 {
-                    // Reversed winding for front face (normal points back toward camera)
-                    localSubmeshData[frontMat].Add(frontMap[id2]);
-                    localSubmeshData[frontMat].Add(frontMap[id1]);
-                    localSubmeshData[frontMat].Add(frontMap[id0]);
+                    var v0 = t.GetVertex(0);
+                    var v1 = t.GetVertex(1);
+                    var v2 = t.GetVertex(2);
+
+                    long id0 = GetDeterministicVertexId(v0.X, v0.Y);
+                    long id1 = GetDeterministicVertexId(v1.X, v1.Y);
+                    long id2 = GetDeterministicVertexId(v2.X, v2.Y);
+
+                    var frontMap = layerVertexMaps[0];
+                    if (frontMap.ContainsKey(id0) && frontMap.ContainsKey(id1) && frontMap.ContainsKey(id2))
+                    {
+                        // Reversed winding for front face (normal points back toward camera)
+                        localSubmeshData[frontMat].Add(frontMap[id2]);
+                        localSubmeshData[frontMat].Add(frontMap[id1]);
+                        localSubmeshData[frontMat].Add(frontMap[id0]);
+                    }
                 }
-            }
 
-            // Back face triangles - use front material (no back slot)
-            Material backMat = frontMat;
-            if (!localSubmeshData.ContainsKey(backMat))
-                localSubmeshData[backMat] = new List<int>();
+                // Back face triangles - use front material (no back slot)
+                Material backMat = frontMat;
+                if (!localSubmeshData.ContainsKey(backMat))
+                    localSubmeshData[backMat] = new List<int>();
 
-            foreach (var t in triMesh.Triangles)
-            {
-                var v0 = t.GetVertex(0);
-                var v1 = t.GetVertex(1);
-                var v2 = t.GetVertex(2);
-
-                long id0 = GetDeterministicVertexId(v0.X, v0.Y);
-                long id1 = GetDeterministicVertexId(v1.X, v1.Y);
-                long id2 = GetDeterministicVertexId(v2.X, v2.Y);
-
-                var backMap = layerVertexMaps[layerVertexMaps.Count - 1];
-                if (backMap.ContainsKey(id0) && backMap.ContainsKey(id1) && backMap.ContainsKey(id2))
+                foreach (var t in triMesh.Triangles)
                 {
-                    // Normal winding for back face (normal points forward away from camera)
-                    localSubmeshData[backMat].Add(backMap[id0]);
-                    localSubmeshData[backMat].Add(backMap[id1]);
-                    localSubmeshData[backMat].Add(backMap[id2]);
+                    var v0 = t.GetVertex(0);
+                    var v1 = t.GetVertex(1);
+                    var v2 = t.GetVertex(2);
+
+                    long id0 = GetDeterministicVertexId(v0.X, v0.Y);
+                    long id1 = GetDeterministicVertexId(v1.X, v1.Y);
+                    long id2 = GetDeterministicVertexId(v2.X, v2.Y);
+
+                    var backMap = layerVertexMaps[layerVertexMaps.Count - 1];
+                    if (backMap.ContainsKey(id0) && backMap.ContainsKey(id1) && backMap.ContainsKey(id2))
+                    {
+                        // Normal winding for back face (normal points forward away from camera)
+                        localSubmeshData[backMat].Add(backMap[id0]);
+                        localSubmeshData[backMat].Add(backMap[id1]);
+                        localSubmeshData[backMat].Add(backMap[id2]);
+                    }
                 }
             }
 
@@ -1329,30 +1333,34 @@ public class GlyphText3D : MonoBehaviour
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < rendererMaterials.Length ? rendererMaterials[bandSlotIndex] : frontMat;
 
-                        if (!localSubmeshData.ContainsKey(layerMat))
-                            localSubmeshData[layerMat] = new List<int>();
-
                         Vector2 edge = (p1 - p0).normalized;
                         Vector3 edgeNormal = new Vector3(edge.y, -edge.x, 0f).normalized;
 
-                        // Reversed winding for positive Z extrusion direction
-                        if (isHole)
+                        // Only generate band triangles if we have a valid material
+                        if (layerMat != null)
                         {
-                            localSubmeshData[layerMat].Add(curr0);
-                            localSubmeshData[layerMat].Add(next1);
-                            localSubmeshData[layerMat].Add(curr1);
-                            localSubmeshData[layerMat].Add(curr0);
-                            localSubmeshData[layerMat].Add(next0);
-                            localSubmeshData[layerMat].Add(next1);
-                        }
-                        else
-                        {
-                            localSubmeshData[layerMat].Add(curr0);
-                            localSubmeshData[layerMat].Add(curr1);
-                            localSubmeshData[layerMat].Add(next1);
-                            localSubmeshData[layerMat].Add(curr0);
-                            localSubmeshData[layerMat].Add(next1);
-                            localSubmeshData[layerMat].Add(next0);
+                            if (!localSubmeshData.ContainsKey(layerMat))
+                                localSubmeshData[layerMat] = new List<int>();
+
+                            // Reversed winding for positive Z extrusion direction
+                            if (isHole)
+                            {
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(curr1);
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next0);
+                                localSubmeshData[layerMat].Add(next1);
+                            }
+                            else
+                            {
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(curr1);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(next0);
+                            }
                         }
 
                         Vector2 midpoint = (p0 + p1) / 2f;
