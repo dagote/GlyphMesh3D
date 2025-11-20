@@ -1,7 +1,9 @@
 {
   "name": "com.lanternpines.glyphmesh3d.runtime",
   "rootNamespace": "LanternPines.GlyphMesh3D",
-  "references": [],
+  "references": [
+    "Unity.TextMeshPro"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

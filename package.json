@@ -20,5 +20,8 @@
     "type": "git",
     "url": "https://github.com/CCoxLanternPines/GlyphMesh3D.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "com.unity.textmeshpro": "3.0.6"
+  }
 }
