@@ -311,6 +311,9 @@ public class GlyphText3D : MonoBehaviour
 
     internal void RegenerateMesh()
     {
+        // Ensure components are initialized before mesh generation
+        InitializeComponents();
+
         Debug.Log($"[GlyphText3D.RegenerateMesh] Starting - Text: '{text}', Font: {(ActiveFontAsset != null ? ActiveFontAsset.name : "NULL")}");
 
         // Safety checks
