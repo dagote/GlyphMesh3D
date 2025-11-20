@@ -1,0 +1,24 @@
+{
+  "name": "com.lanternpines.glyphmesh3d",
+  "version": "1.0.0",
+  "displayName": "GlyphMesh3D",
+  "description": "A Unity package for 3D glyph mesh generation and manipulation",
+  "unity": "2020.3",
+  "keywords": [
+    "3d",
+    "mesh",
+    "glyph",
+    "text",
+    "graphics"
+  ],
+  "author": {
+    "name": "Lantern Pines",
+    "email": "ops@lanternpines.com",
+    "url": "https://github.com/CCoxLanternPines"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CCoxLanternPines/GlyphMesh3D.git"
+  },
+  "license": "MIT"
+}

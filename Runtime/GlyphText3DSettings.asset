@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d2603be8cfd8a54fb5dfffa0cfb8ab7, type: 3}
+  m_Name: GlyphText3DSettings
+  m_EditorClassIdentifier: 
+  fontAsset: {fileID: 0}
+  simplifyArcLength: 1.5
+  cornerAngleThreshold: 80
+  postDpEpsilon: 1.2
+  smoothingIterations: 0
+  faceMaterial: {fileID: 0}
