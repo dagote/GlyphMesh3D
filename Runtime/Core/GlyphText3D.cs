@@ -1,5 +1,9 @@
 using UnityEngine;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace LanternPines.GlyphMesh3D.Core
 {
     /// <summary>
@@ -26,6 +30,36 @@ namespace LanternPines.GlyphMesh3D.Core
         // - Build combined mesh for text string
         // - Support dynamic text updates
         // - Handle material assignment from asset
+
+#if UNITY_EDITOR
+        [MenuItem("GameObject/3D Object/Glyph Text 3D")]
+        private static void CreateGlyphText3DObject()
+        {
+            GameObject go = new GameObject("GlyphText3D");
+            GlyphText3D component = go.AddComponent<GlyphText3D>();
+
+            if (Selection.activeTransform != null)
+                go.transform.SetParent(Selection.activeTransform);
+
+            Selection.activeGameObject = go;
+
+            // Set up default material
+            MeshRenderer renderer = go.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                // Try URP Lit first, fall back to Standard
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                    shader = Shader.Find("Standard");
+
+                if (shader != null)
+                {
+                    Material defaultMat = new Material(shader);
+                    renderer.sharedMaterial = defaultMat;
+                }
+            }
+        }
+#endif
 
         private void OnValidate()
         {
