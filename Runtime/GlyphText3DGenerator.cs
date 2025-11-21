@@ -195,6 +195,19 @@ public class GlyphText3DGenerator : MonoBehaviour
     [Range(0f, 5f)]
     [SerializeField] private float postDpEpsilon = 1.2f;
 
+    [Header("UV Unwrapping (XAtlas)")]
+    [Tooltip("Enable xatlas UV unwrapping for better UV layout. Falls back to simple projection if disabled or unavailable.")]
+    [SerializeField] private bool useXAtlasUVUnwrapping = true;
+    [Range(1, 16)]
+    [Tooltip("Padding between UV islands in pixels to prevent texture bleeding")]
+    [SerializeField] private int uvPadding = 4;
+    [Range(256, 4096)]
+    [Tooltip("Target texture resolution for UV atlas packing")]
+    [SerializeField] private int uvResolution = 1024;
+    [Range(0.1f, 10f)]
+    [Tooltip("Texels per unit for consistent texel density across the mesh")]
+    [SerializeField] private float texelsPerUnit = 1.0f;
+
     // Auto-assign and debug features removed; manual renderer material control is recommended.
 
     // Internal state
@@ -1501,7 +1514,38 @@ public class GlyphText3DGenerator : MonoBehaviour
             }
 
             // Generate UVs for all vertices
-            var meshUVs = GenerateCurvedMeshUVs(vertices, layers, layerVertexMaps, layerSideVertexMaps, sortedVertices);
+            List<Vector2> meshUVs;
+
+            // Try to use xatlas for UV generation first
+            Vector3[] vertexArray = vertices.ToArray();
+            Vector3[] normalArray = meshNormals;
+
+            // Build triangle array from submesh data
+            List<int> allTriangles = new List<int>();
+            foreach (var kvp in localSubmeshData)
+            {
+                allTriangles.AddRange(kvp.Value);
+            }
+
+            // Only try xatlas if enabled in settings
+            Vector2[] xatlasUVs = null;
+            if (useXAtlasUVUnwrapping)
+            {
+                xatlasUVs = GenerateUVsWithXAtlas(vertexArray, allTriangles.ToArray(), normalArray, layers, layerVertexMaps);
+            }
+
+            if (xatlasUVs != null && xatlasUVs.Length == vertices.Count)
+            {
+                // Successfully generated UVs with xatlas
+                meshUVs = new List<Vector2>(xatlasUVs);
+                Debug.Log("GlyphText3D: Using xatlas-generated UVs");
+            }
+            else
+            {
+                // Fallback to original UV generation
+                meshUVs = GenerateCurvedMeshUVs(vertices, layers, layerVertexMaps, layerSideVertexMaps, sortedVertices);
+                Debug.Log("GlyphText3D: Using fallback UV generation");
+            }
 
             // Add vertices, normals, and UVs to global lists
             allVertices.AddRange(vertices);
@@ -1601,6 +1645,348 @@ public class GlyphText3DGenerator : MonoBehaviour
         }
         return -1;
     }
+
+    #region XAtlas UV Unwrapping
+
+    /// <summary>
+    /// Generate UVs using xatlas library for proper face projection mapping
+    /// </summary>
+    /// <param name="vertices">Mesh vertices</param>
+    /// <param name="triangles">Mesh triangles</param>
+    /// <param name="normals">Mesh normals</param>
+    /// <param name="layers">Extrusion layers</param>
+    /// <param name="layerVertexMaps">Vertex maps for each layer</param>
+    /// <returns>UV coordinates array</returns>
+    private Vector2[] GenerateUVsWithXAtlas(Vector3[] vertices, int[] triangles, Vector3[] normals,
+        List<ExtrusionLayer> layers, List<Dictionary<long, int>> layerVertexMaps)
+    {
+        if (vertices == null || vertices.Length == 0 || triangles == null || triangles.Length == 0)
+        {
+            Debug.LogWarning("GlyphText3D: Cannot generate xatlas UVs - invalid mesh data");
+            return null;
+        }
+
+        try
+        {
+            // Check if xatlas library is available
+            if (!IsXAtlasAvailable())
+            {
+                Debug.LogWarning("GlyphText3D: xatlas library not available, using fallback UV generation");
+                return null;
+            }
+
+            // Identify face groups (front, back, sides)
+            var faceGroups = IdentifyFaceGroups(vertices, triangles, normals, layers, layerVertexMaps);
+
+            // Initialize xatlas
+            using (XAtlas atlas = new XAtlas())
+            {
+                // Configure chart options for face projection mapping
+                atlas.chartOptions.maxIterations = 1;  // For planar faces
+                atlas.chartOptions.normalDeviationWeight = 2.0f;
+                atlas.chartOptions.roundnessWeight = 0.01f;
+                atlas.chartOptions.straightnessWeight = 6.0f;
+
+                // Configure pack options from serialized fields
+                atlas.packOptions.padding = uvPadding;
+                atlas.packOptions.texelsPerUnit = texelsPerUnit;
+                atlas.packOptions.resolution = uvResolution;
+                atlas.packOptions.rotateCharts = 1;  // Allow rotation for better packing
+
+                // Add mesh to atlas
+                if (!atlas.AddMesh(vertices, triangles, normals))
+                {
+                    Debug.LogError("GlyphText3D: Failed to add mesh to xatlas");
+                    return null;
+                }
+
+                // Compute charts (UV islands)
+                if (!atlas.ComputeCharts())
+                {
+                    Debug.LogError("GlyphText3D: Failed to compute charts in xatlas");
+                    return null;
+                }
+
+                // Pack charts into texture atlas
+                if (!atlas.PackCharts())
+                {
+                    Debug.LogError("GlyphText3D: Failed to pack charts in xatlas");
+                    return null;
+                }
+
+                // Get UV coordinates
+                Vector2[] uvs = atlas.GetUVs(0);
+
+                if (uvs == null || uvs.Length == 0)
+                {
+                    Debug.LogError("GlyphText3D: Failed to retrieve UVs from xatlas");
+                    return null;
+                }
+
+                // Validate UV coverage
+                if (!ValidateUVCoverage(uvs))
+                {
+                    Debug.LogWarning("GlyphText3D: UV coverage validation found issues");
+                }
+
+                // Log UV generation statistics
+                int atlasWidth = atlas.GetAtlasWidth();
+                int atlasHeight = atlas.GetAtlasHeight();
+                Debug.Log($"GlyphText3D: Generated UVs with xatlas - Atlas size: {atlasWidth}x{atlasHeight}, UV count: {uvs.Length}");
+
+                // Note: xatlas may split vertices to create proper UV seams
+                // We need to handle vertex splitting if it occurs
+                int newVertexCount = uvs.Length;
+                if (newVertexCount != vertices.Length)
+                {
+                    Debug.Log($"GlyphText3D: xatlas split vertices - Original: {vertices.Length}, New: {newVertexCount}");
+                    // We would need to update the mesh with new vertices and indices
+                    // For now, we'll return the UVs and handle vertex splitting in the caller
+                }
+
+                return uvs;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"GlyphText3D: Exception during xatlas UV generation: {ex.Message}\n{ex.StackTrace}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Check if xatlas library is available
+    /// </summary>
+    private bool IsXAtlasAvailable()
+    {
+        try
+        {
+            // Try to create an atlas instance to verify the library is loaded
+            using (XAtlas atlas = new XAtlas())
+            {
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"GlyphText3D: xatlas library not available: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Face group information for UV mapping
+    /// </summary>
+    private class FaceGroup
+    {
+        public List<int> triangleIndices = new List<int>();
+        public Vector3 normal;
+        public string groupType;  // "front", "back", "side"
+        public int layerIndex = -1;
+    }
+
+    /// <summary>
+    /// Identify face groups (front, back, sides) from mesh data
+    /// </summary>
+    private Dictionary<string, FaceGroup> IdentifyFaceGroups(Vector3[] vertices, int[] triangles, Vector3[] normals,
+        List<ExtrusionLayer> layers, List<Dictionary<long, int>> layerVertexMaps)
+    {
+        var groups = new Dictionary<string, FaceGroup>();
+        groups["front"] = new FaceGroup { normal = Vector3.back, groupType = "front", layerIndex = 0 };
+        groups["back"] = new FaceGroup { normal = Vector3.forward, groupType = "back", layerIndex = layers.Count - 1 };
+
+        // Identify side faces for each extrusion band
+        for (int i = 0; i < layers.Count - 1; i++)
+        {
+            groups[$"side_{i}"] = new FaceGroup { normal = Vector3.zero, groupType = "side", layerIndex = i };
+        }
+
+        // Classify triangles into groups based on their normals and Z position
+        for (int i = 0; i < triangles.Length; i += 3)
+        {
+            int i0 = triangles[i];
+            int i1 = triangles[i + 1];
+            int i2 = triangles[i + 2];
+
+            Vector3 v0 = vertices[i0];
+            Vector3 v1 = vertices[i1];
+            Vector3 v2 = vertices[i2];
+
+            // Calculate face center Z position
+            float avgZ = (v0.z + v1.z + v2.z) / 3f;
+
+            // Calculate face normal
+            Vector3 edge1 = v1 - v0;
+            Vector3 edge2 = v2 - v0;
+            Vector3 faceNormal = Vector3.Cross(edge1, edge2).normalized;
+
+            // Classify based on normal direction and Z position
+            if (Mathf.Abs(faceNormal.z) > 0.9f)
+            {
+                // Front or back face
+                if (Mathf.Approximately(avgZ, 0f))
+                {
+                    groups["front"].triangleIndices.Add(i);
+                }
+                else if (layers.Count > 0 && Mathf.Approximately(avgZ, layers[layers.Count - 1].depth * SCALE_FACTOR))
+                {
+                    groups["back"].triangleIndices.Add(i);
+                }
+            }
+            else
+            {
+                // Side face - determine which layer band it belongs to
+                for (int layerIdx = 0; layerIdx < layers.Count - 1; layerIdx++)
+                {
+                    float minZ = layers[layerIdx].depth * SCALE_FACTOR;
+                    float maxZ = layers[layerIdx + 1].depth * SCALE_FACTOR;
+
+                    if (avgZ >= minZ - 0.001f && avgZ <= maxZ + 0.001f)
+                    {
+                        groups[$"side_{layerIdx}"].triangleIndices.Add(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Setup planar projection for front/back faces
+    /// </summary>
+    private void SetupPlanarProjection(Vector3[] vertices, Vector3 normal, List<int> triangleIndices,
+        ref Vector2[] uvs)
+    {
+        if (triangleIndices == null || triangleIndices.Count == 0)
+            return;
+
+        // Find bounds for normalization
+        Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+
+        HashSet<int> vertexSet = new HashSet<int>();
+        foreach (int triIdx in triangleIndices)
+        {
+            vertexSet.Add(triIdx);
+        }
+
+        foreach (int idx in vertexSet)
+        {
+            if (idx < vertices.Length)
+            {
+                Vector3 v = vertices[idx];
+                min = Vector3.Min(min, v);
+                max = Vector3.Max(max, v);
+            }
+        }
+
+        float width = max.x - min.x;
+        float height = max.y - min.y;
+
+        if (width < 0.0001f) width = 1f;
+        if (height < 0.0001f) height = 1f;
+
+        // Project vertices onto XY plane and normalize
+        foreach (int idx in vertexSet)
+        {
+            if (idx < vertices.Length && idx < uvs.Length)
+            {
+                Vector3 v = vertices[idx];
+                float u = (v.x - min.x) / width;
+                float vCoord = (v.y - min.y) / height;
+                uvs[idx] = new Vector2(u, vCoord);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Setup cylindrical projection for extrusion sides
+    /// </summary>
+    private void SetupCylindricalProjection(Vector3[] vertices, List<int> triangleIndices,
+        float depthMin, float depthMax, ref Vector2[] uvs)
+    {
+        if (triangleIndices == null || triangleIndices.Count == 0)
+            return;
+
+        HashSet<int> vertexSet = new HashSet<int>();
+        foreach (int triIdx in triangleIndices)
+        {
+            vertexSet.Add(triIdx);
+        }
+
+        // Calculate angle around center for each vertex
+        Vector2 center = Vector2.zero;
+        int count = 0;
+        foreach (int idx in vertexSet)
+        {
+            if (idx < vertices.Length)
+            {
+                center += new Vector2(vertices[idx].x, vertices[idx].y);
+                count++;
+            }
+        }
+        if (count > 0)
+            center /= count;
+
+        // Unwrap as cylindrical coordinates
+        foreach (int idx in vertexSet)
+        {
+            if (idx < vertices.Length && idx < uvs.Length)
+            {
+                Vector3 v = vertices[idx];
+                Vector2 dir = new Vector2(v.x, v.y) - center;
+                float angle = Mathf.Atan2(dir.y, dir.x);
+                float u = (angle + Mathf.PI) / (2f * Mathf.PI);  // Normalize to 0-1
+
+                float depth = v.z;
+                float vCoord = depthMax > depthMin ? (depth - depthMin) / (depthMax - depthMin) : 0.5f;
+
+                uvs[idx] = new Vector2(u, vCoord);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validate that all UV coordinates are within valid range [0,1]
+    /// </summary>
+    private bool ValidateUVCoverage(Vector2[] uvs)
+    {
+        if (uvs == null || uvs.Length == 0)
+            return false;
+
+        bool allValid = true;
+        int outOfRangeCount = 0;
+
+        Vector2 minUV = new Vector2(float.MaxValue, float.MaxValue);
+        Vector2 maxUV = new Vector2(float.MinValue, float.MinValue);
+
+        foreach (Vector2 uv in uvs)
+        {
+            minUV = Vector2.Min(minUV, uv);
+            maxUV = Vector2.Max(maxUV, uv);
+
+            if (uv.x < -0.001f || uv.x > 1.001f || uv.y < -0.001f || uv.y > 1.001f)
+            {
+                outOfRangeCount++;
+                allValid = false;
+            }
+        }
+
+        if (outOfRangeCount > 0)
+        {
+            Debug.LogWarning($"GlyphText3D: {outOfRangeCount} UVs out of range [0,1]. UV bounds: ({minUV.x}, {minUV.y}) to ({maxUV.x}, {maxUV.y})");
+        }
+        else
+        {
+            Debug.Log($"GlyphText3D: UV coverage valid. UV bounds: ({minUV.x}, {minUV.y}) to ({maxUV.x}, {maxUV.y})");
+        }
+
+        return allValid;
+    }
+
+    #endregion
 
     private void OnDestroy()
     {
