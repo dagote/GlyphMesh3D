@@ -179,7 +179,7 @@ public class GlyphText3DGenerator : MonoBehaviour
 
     [Header("Extrusion Settings")]
     [Range(0f, 100f)]
-    [SerializeField] private float extrusionDepth = 20f;
+    [SerializeField] private float extrusionDepth = 10f;
     [Range(0f, 50f)]
     [Tooltip("Controls the width of the extrusion offset perpendicular to the boundary")]
     [SerializeField] private float extrusionWidth = 0f;
@@ -188,11 +188,11 @@ public class GlyphText3DGenerator : MonoBehaviour
     [SerializeField] internal ExtrusionProfileCurve extrusionProfile = new ExtrusionProfileCurve();
 
     [Header("Advanced Simplification")]
-    [Range(0f, 10f)]
+    [Range(0f, 5f)]
     [SerializeField] private float simplifyArcLength = 1.5f;
     [Range(40f, 100f)]
     [SerializeField] private float cornerAngleThreshold = 80f;
-    [Range(0f, 10f)]
+    [Range(0f, 5f)]
     [SerializeField] private float postDpEpsilon = 1.2f;
 
     // Auto-assign and debug features removed; manual renderer material control is recommended.
@@ -354,6 +354,47 @@ public class GlyphText3DGenerator : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Generates UV coordinates for all vertices by projecting them onto the XY plane
+    /// and normalizing to 0-1 range based on mesh bounds.
+    /// </summary>
+    private List<Vector2> GenerateUVsForMesh(List<Vector3> vertices)
+    {
+        var uvs = new List<Vector2>(vertices.Count);
+
+        if (vertices.Count == 0)
+            return uvs;
+
+        // Calculate bounds for UV normalization
+        Vector3 min = vertices[0];
+        Vector3 max = vertices[0];
+
+        foreach (var v in vertices)
+        {
+            min.x = Mathf.Min(min.x, v.x);
+            min.y = Mathf.Min(min.y, v.y);
+            max.x = Mathf.Max(max.x, v.x);
+            max.y = Mathf.Max(max.y, v.y);
+        }
+
+        float width = max.x - min.x;
+        float height = max.y - min.y;
+
+        // Avoid division by zero
+        if (width < 0.0001f) width = 1f;
+        if (height < 0.0001f) height = 1f;
+
+        // Generate UVs by projecting vertices onto XY plane and normalizing
+        foreach (var v in vertices)
+        {
+            float u = (v.x - min.x) / width;
+            float vCoord = (v.y - min.y) / height;
+            uvs.Add(new Vector2(u, vCoord));
+        }
+
+        return uvs;
+    }
+
     private void GenerateMeshForText()
     {
         float xOffset = 0f;
@@ -420,6 +461,10 @@ public class GlyphText3DGenerator : MonoBehaviour
             {
                 combinedMesh.vertices = allVertices.ToArray();
                 combinedMesh.normals = allNormals.ToArray();
+
+                // Generate UVs for the mesh
+                List<Vector2> uvs = GenerateUVsForMesh(allVertices);
+                combinedMesh.uv = uvs.ToArray();
 
                 // Use MaterialSlotMap as source of truth for structure
                 var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
@@ -488,6 +533,7 @@ public class GlyphText3DGenerator : MonoBehaviour
         return fontAsset.glyphTable.FirstOrDefault(g => g.index == glyphChar.glyphIndex);
     }
 
+
     private List<Vector2Int> ExtractGlyphEdgePixels(Texture2D atlasTexture, UnityEngine.TextCore.GlyphRect glyphRect)
     {
         try
@@ -526,6 +572,7 @@ public class GlyphText3DGenerator : MonoBehaviour
             return new List<Vector2Int>();
         }
     }
+    
 
     private bool IsEdge(int x, int y, int width, int height, Color[] pixels, float threshold)
     {
