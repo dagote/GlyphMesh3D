@@ -1723,6 +1723,19 @@ public class GlyphText3DGenerator : MonoBehaviour
                     return null;
                 }
 
+                // Check if xatlas split vertices
+                int newVertexCount = uvs.Length;
+                if (newVertexCount != vertices.Length)
+                {
+                    Debug.LogWarning($"GlyphText3D: xatlas split vertices (Original: {vertices.Length}, New: {newVertexCount}). Using fallback for gradient continuity.");
+                    // Vertex splitting breaks gradient continuity on extrusion sides
+                    // Fall back to custom UV generation that preserves topology
+                    return null;
+                }
+
+                // Apply custom strip unwrapping for extrusion sides to ensure gradient continuity
+                ApplyExtrusionStripUVs(ref uvs, vertices, triangles, normals, faceGroups, layers);
+
                 // Validate UV coverage
                 if (!ValidateUVCoverage(uvs))
                 {
@@ -1734,16 +1747,6 @@ public class GlyphText3DGenerator : MonoBehaviour
                 int atlasHeight = atlas.GetAtlasHeight();
                 int atlasCount = atlas.GetAtlasCount();
                 Debug.Log($"GlyphText3D: Generated UVs with xatlas - Atlas size: {atlasWidth}x{atlasHeight}, Atlas count: {atlasCount}, UV count: {uvs.Length}");
-
-                // Note: xatlas may split vertices to create proper UV seams
-                // We need to handle vertex splitting if it occurs
-                int newVertexCount = uvs.Length;
-                if (newVertexCount != vertices.Length)
-                {
-                    Debug.Log($"GlyphText3D: xatlas split vertices - Original: {vertices.Length}, New: {newVertexCount}");
-                    // We would need to update the mesh with new vertices and indices
-                    // For now, we'll return the UVs and handle vertex splitting in the caller
-                }
 
                 return uvs;
             }
@@ -1852,6 +1855,79 @@ public class GlyphText3DGenerator : MonoBehaviour
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// Apply proper strip unwrapping to extrusion sides for gradient continuity
+    /// Keeps xatlas UVs for front/back faces, replaces side UVs with walking unfold
+    /// </summary>
+    private void ApplyExtrusionStripUVs(ref Vector2[] uvs, Vector3[] vertices, int[] triangles,
+        Vector3[] normals, Dictionary<string, FaceGroup> faceGroups, List<ExtrusionLayer> layers)
+    {
+        if (layers == null || layers.Count < 2)
+            return;
+
+        // Identify which vertices belong to side faces
+        HashSet<int> sideVertices = new HashSet<int>();
+        foreach (var kvp in faceGroups)
+        {
+            if (kvp.Value.groupType == "side")
+            {
+                foreach (int triIdx in kvp.Value.triangleIndices)
+                {
+                    // triangleIndices stores the start index of each triangle
+                    if (triIdx < triangles.Length - 2)
+                    {
+                        sideVertices.Add(triangles[triIdx]);
+                        sideVertices.Add(triangles[triIdx + 1]);
+                        sideVertices.Add(triangles[triIdx + 2]);
+                    }
+                }
+            }
+        }
+
+        if (sideVertices.Count == 0)
+            return;
+
+        // For each side vertex, calculate UV based on:
+        // U: angular position around the glyph perimeter (0-1 wrapping)
+        // V: normalized depth (0 at front, 1 at back)
+
+        // Calculate center point for angular calculation
+        Vector2 center = Vector2.zero;
+        int count = 0;
+        foreach (int idx in sideVertices)
+        {
+            center += new Vector2(vertices[idx].x, vertices[idx].y);
+            count++;
+        }
+        if (count > 0)
+            center /= count;
+
+        // Get depth range
+        float minZ = layers[0].depth * SCALE_FACTOR;
+        float maxZ = layers[layers.Count - 1].depth * SCALE_FACTOR;
+        float depthRange = maxZ - minZ;
+        if (depthRange < 0.0001f) depthRange = 1f;
+
+        // Apply strip UVs: continuous angular unwrap + depth
+        foreach (int idx in sideVertices)
+        {
+            Vector3 v = vertices[idx];
+
+            // Calculate angular position (U coordinate)
+            Vector2 dir = new Vector2(v.x, v.y) - center;
+            float angle = Mathf.Atan2(dir.y, dir.x);
+            float u = (angle + Mathf.PI) / (2f * Mathf.PI); // Normalize to 0-1
+
+            // Calculate depth position (V coordinate)
+            float depth = v.z;
+            float vCoord = (depth - minZ) / depthRange;
+
+            uvs[idx] = new Vector2(u, vCoord);
+        }
+
+        Debug.Log($"GlyphText3D: Applied strip unwrapping to {sideVertices.Count} side vertices for gradient continuity");
     }
 
     /// <summary>
