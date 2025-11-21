@@ -354,6 +354,47 @@ public class GlyphText3DGenerator : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Generates UV coordinates for all vertices by projecting them onto the XY plane
+    /// and normalizing to 0-1 range based on mesh bounds.
+    /// </summary>
+    private List<Vector2> GenerateUVsForMesh(List<Vector3> vertices)
+    {
+        var uvs = new List<Vector2>(vertices.Count);
+
+        if (vertices.Count == 0)
+            return uvs;
+
+        // Calculate bounds for UV normalization
+        Vector3 min = vertices[0];
+        Vector3 max = vertices[0];
+
+        foreach (var v in vertices)
+        {
+            min.x = Mathf.Min(min.x, v.x);
+            min.y = Mathf.Min(min.y, v.y);
+            max.x = Mathf.Max(max.x, v.x);
+            max.y = Mathf.Max(max.y, v.y);
+        }
+
+        float width = max.x - min.x;
+        float height = max.y - min.y;
+
+        // Avoid division by zero
+        if (width < 0.0001f) width = 1f;
+        if (height < 0.0001f) height = 1f;
+
+        // Generate UVs by projecting vertices onto XY plane and normalizing
+        foreach (var v in vertices)
+        {
+            float u = (v.x - min.x) / width;
+            float vCoord = (v.y - min.y) / height;
+            uvs.Add(new Vector2(u, vCoord));
+        }
+
+        return uvs;
+    }
+
     private void GenerateMeshForText()
     {
         float xOffset = 0f;
@@ -420,6 +461,10 @@ public class GlyphText3DGenerator : MonoBehaviour
             {
                 combinedMesh.vertices = allVertices.ToArray();
                 combinedMesh.normals = allNormals.ToArray();
+
+                // Generate UVs for the mesh
+                List<Vector2> uvs = GenerateUVsForMesh(allVertices);
+                combinedMesh.uv = uvs.ToArray();
 
                 // Use MaterialSlotMap as source of truth for structure
                 var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
