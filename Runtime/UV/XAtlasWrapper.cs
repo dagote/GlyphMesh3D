@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-/// <summary>
-/// C# wrapper for xatlas library (xatlasLib.dll) for UV unwrapping
-/// Based on guycalledfrank/xatlasLib wrapper
-/// </summary>
-public class XAtlas : IDisposable
+namespace LanternPines.GlyphMesh3D.UV
+{
+    /// <summary>
+    /// C# wrapper for xatlas library (xatlasLib.dll) for UV unwrapping.
+    /// Based on guycalledfrank/xatlasLib wrapper.
+    /// Enhanced wrapper with simplified API for glyph mesh UV generation.
+    /// </summary>
+    public class XAtlasWrapper : IDisposable
 {
     private IntPtr atlasPtr = IntPtr.Zero;
     private bool isDisposed = false;
@@ -63,7 +66,7 @@ public class XAtlas : IDisposable
     /// <summary>
     /// Initialize xatlas atlas
     /// </summary>
-    public XAtlas()
+    public XAtlasWrapper()
     {
         atlasPtr = xatlasCreateAtlas();
         if (atlasPtr == IntPtr.Zero)
@@ -402,8 +405,67 @@ public class XAtlas : IDisposable
         }
     }
 
-    ~XAtlas()
+    ~XAtlasWrapper()
     {
         Dispose();
+    }
+
+        /// <summary>
+        /// High-level helper: Generate UV coordinates for a glyph mesh
+        /// </summary>
+        /// <param name="vertices">Mesh vertices</param>
+        /// <param name="triangles">Mesh triangles</param>
+        /// <param name="normals">Optional mesh normals</param>
+        /// <param name="padding">Padding between UV islands</param>
+        /// <param name="resolution">Target texture resolution</param>
+        /// <param name="texelsPerUnit">Texels per unit for consistent density</param>
+        /// <returns>UV coordinates, or null if generation failed</returns>
+        public static Vector2[] GenerateGlyphUVs(Vector3[] vertices, int[] triangles, Vector3[] normals = null,
+            int padding = 4, int resolution = 1024, float texelsPerUnit = 1.0f)
+        {
+            try
+            {
+                using (var atlas = new XAtlasWrapper())
+                {
+                    atlas.padding = padding;
+                    atlas.resolution = resolution;
+                    atlas.texelsPerUnit = texelsPerUnit;
+
+                    if (!atlas.AddMesh(vertices, triangles, normals))
+                    {
+                        Debug.LogWarning("XAtlasWrapper: Failed to add mesh");
+                        return null;
+                    }
+
+                    if (!atlas.ComputeCharts())
+                    {
+                        Debug.LogWarning("XAtlasWrapper: Failed to compute charts");
+                        return null;
+                    }
+
+                    if (!atlas.PackCharts())
+                    {
+                        Debug.LogWarning("XAtlasWrapper: Failed to pack charts");
+                        return null;
+                    }
+
+                    atlas.Normalize();
+
+                    Vector2[] uvs = atlas.GetUVs(0);
+                    if (uvs == null || uvs.Length != vertices.Length)
+                    {
+                        Debug.LogWarning($"XAtlasWrapper: UV count mismatch - expected {vertices.Length}, got {uvs?.Length ?? 0}");
+                        return null;
+                    }
+
+                    return uvs;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"XAtlasWrapper: Exception during UV generation - {ex.Message}");
+                return null;
+            }
+        }
     }
 }
