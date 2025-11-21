@@ -355,10 +355,13 @@ public class GlyphText3DGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Generates UV coordinates for all vertices by projecting them onto the XY plane
-    /// and normalizing to 0-1 range based on mesh bounds.
+    /// Generates UV coordinates for front or back face vertices.
+    /// Projects vertices onto XY plane and maps to appropriate UV region.
     /// </summary>
-    private List<Vector2> GenerateUVsForMesh(List<Vector3> vertices)
+    /// <param name="vertices">List of vertices for the face</param>
+    /// <param name="isFrontFace">True for front face (top region), false for back face (bottom region)</param>
+    /// <returns>List of UV coordinates</returns>
+    private List<Vector2> GenerateFaceUVs(List<Vector3> vertices, bool isFrontFace)
     {
         var uvs = new List<Vector2>(vertices.Count);
 
@@ -384,12 +387,115 @@ public class GlyphText3DGenerator : MonoBehaviour
         if (width < 0.0001f) width = 1f;
         if (height < 0.0001f) height = 1f;
 
-        // Generate UVs by projecting vertices onto XY plane and normalizing
+        // UV region for faces: 0-0.25 (U)
+        // Front face: 0.5-1.0 (V), Back face: 0-0.5 (V)
+        float uMin = 0f;
+        float uMax = 0.25f;
+        float vMin = isFrontFace ? 0.5f : 0f;
+        float vMax = isFrontFace ? 1.0f : 0.5f;
+
+        // Generate UVs by projecting vertices onto XY plane and normalizing to face region
         foreach (var v in vertices)
         {
-            float u = (v.x - min.x) / width;
-            float vCoord = (v.y - min.y) / height;
+            float normalizedX = (v.x - min.x) / width;
+            float normalizedY = (v.y - min.y) / height;
+            float u = Mathf.Lerp(uMin, uMax, normalizedX);
+            float vCoord = Mathf.Lerp(vMin, vMax, normalizedY);
             uvs.Add(new Vector2(u, vCoord));
+        }
+
+        return uvs;
+    }
+
+    /// <summary>
+    /// Generates UV coordinates for curved mesh with front/back faces and extrusion bands.
+    /// </summary>
+    private List<Vector2> GenerateCurvedMeshUVs(List<Vector3> vertices, List<ExtrusionLayer> layers,
+        List<Dictionary<long, int>> layerVertexMaps, List<Dictionary<long, int>> layerSideVertexMaps,
+        List<TriangleNet.Geometry.Vertex> sortedVertices)
+    {
+        var uvs = new List<Vector2>(new Vector2[vertices.Count]);
+
+        if (layers.Count == 0)
+            return uvs;
+
+        // Calculate bounds for face UV normalization
+        float minX = float.MaxValue, minY = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue;
+
+        foreach (var v in sortedVertices)
+        {
+            minX = Mathf.Min(minX, (float)v.X * SCALE_FACTOR);
+            minY = Mathf.Min(minY, (float)v.Y * SCALE_FACTOR);
+            maxX = Mathf.Max(maxX, (float)v.X * SCALE_FACTOR);
+            maxY = Mathf.Max(maxY, (float)v.Y * SCALE_FACTOR);
+        }
+
+        float width = maxX - minX;
+        float height = maxY - minY;
+        if (width < 0.0001f) width = 1f;
+        if (height < 0.0001f) height = 1f;
+
+        // Generate UVs for each layer's face vertices (front and back faces)
+        for (int layerIdx = 0; layerIdx < layers.Count; layerIdx++)
+        {
+            bool isFrontFace = (layerIdx == 0);
+            float uMin = 0f;
+            float uMax = 0.25f;
+            float vMin = isFrontFace ? 0.5f : 0f;
+            float vMax = isFrontFace ? 1.0f : 0.5f;
+
+            foreach (var kv in layerVertexMaps[layerIdx])
+            {
+                int vertIdx = kv.Value;
+                Vector3 v = vertices[vertIdx];
+                float normalizedX = (v.x - minX) / width;
+                float normalizedY = (v.y - minY) / height;
+                float u = Mathf.Lerp(uMin, uMax, normalizedX);
+                float vCoord = Mathf.Lerp(vMin, vMax, normalizedY);
+                uvs[vertIdx] = new Vector2(u, vCoord);
+            }
+        }
+
+        // Generate UVs for side vertices (extrusion bands)
+        // Each band gets a horizontal strip in the right region (0.25-1.0 U)
+        int bandCount = layers.Count - 1;
+        if (bandCount > 0)
+        {
+            float bandUWidth = 0.75f / bandCount;
+
+            for (int layerIdx = 0; layerIdx < layers.Count; layerIdx++)
+            {
+                // Determine which band this layer belongs to for UV mapping
+                // Layers create bands between them, so we need to map each layer's side vertices
+                int bandIdx = layerIdx; // Side vertices from layer i contribute to band i
+
+                float bandUMin = 0.25f + (bandIdx * bandUWidth);
+                float bandUMax = bandUMin + bandUWidth;
+
+                // For side vertices, unwrap them based on their position along the perimeter
+                // We'll use a simple approach: normalize based on vertex index within the layer
+                var sideMap = layerSideVertexMaps[layerIdx];
+                int sideVertCount = sideMap.Count;
+
+                int idx = 0;
+                foreach (var kv in sideMap)
+                {
+                    int vertIdx = kv.Value;
+                    Vector3 v = vertices[vertIdx];
+
+                    // Calculate U based on vertex position within the band
+                    float t = sideVertCount > 1 ? (float)idx / (sideVertCount - 1) : 0.5f;
+                    float u = Mathf.Lerp(bandUMin, bandUMax, t);
+
+                    // V coordinate based on depth (Z position)
+                    float normalizedDepth = extrusionDepth > 0 ? v.z / (extrusionDepth * SCALE_FACTOR) : 0f;
+                    float vCoord = normalizedDepth;
+
+                    uvs[vertIdx] = new Vector2(u, vCoord);
+                    idx++;
+                }
+            }
         }
 
         return uvs;
@@ -450,21 +556,19 @@ public class GlyphText3DGenerator : MonoBehaviour
             var combinedMesh = new Mesh();
             var allVertices = new List<Vector3>();
             var allNormals = new List<Vector3>();
+            var allUVs = new List<Vector2>();
             var submeshData = new Dictionary<Material, List<int>>();
 
             foreach (var group in groups)
             {
-                GenerateMeshFromBoundaries(group, allVertices, allNormals, submeshData);
+                GenerateMeshFromBoundaries(group, allVertices, allNormals, allUVs, submeshData);
             }
 
             if (allVertices.Count > 0 && submeshData.Count > 0)
             {
                 combinedMesh.vertices = allVertices.ToArray();
                 combinedMesh.normals = allNormals.ToArray();
-
-                // Generate UVs for the mesh
-                List<Vector2> uvs = GenerateUVsForMesh(allVertices);
-                combinedMesh.uv = uvs.ToArray();
+                combinedMesh.uv = allUVs.ToArray();
 
                 // Use MaterialSlotMap as source of truth for structure
                 var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
@@ -1022,7 +1126,7 @@ public class GlyphText3DGenerator : MonoBehaviour
     }
 
     private void GenerateMeshFromBoundaries(List<List<Vector2>> boundaries, List<Vector3> allVertices,
-        List<Vector3> allNormals, Dictionary<Material, List<int>> submeshData)
+        List<Vector3> allNormals, List<Vector2> allUVs, Dictionary<Material, List<int>> submeshData)
     {
         if (boundaries == null || boundaries.Count == 0) return;
 
@@ -1031,16 +1135,16 @@ public class GlyphText3DGenerator : MonoBehaviour
 
         if (useCurvedExtrusion)
         {
-            GenerateCurvedMesh(boundaries, allVertices, allNormals, submeshData);
+            GenerateCurvedMesh(boundaries, allVertices, allNormals, allUVs, submeshData);
         }
         else
         {
-            GenerateStraightMesh(boundaries, allVertices, allNormals, submeshData);
+            GenerateStraightMesh(boundaries, allVertices, allNormals, allUVs, submeshData);
         }
     }
 
     private void GenerateStraightMesh(List<List<Vector2>> boundaries, List<Vector3> allVertices,
-        List<Vector3> allNormals, Dictionary<Material, List<int>> submeshData)
+        List<Vector3> allNormals, List<Vector2> allUVs, Dictionary<Material, List<int>> submeshData)
     {
         if (boundaries == null || boundaries.Count == 0) return;
 
@@ -1103,9 +1207,13 @@ public class GlyphText3DGenerator : MonoBehaviour
                 meshNormals[i] = Vector3.back;
             }
 
-            // Add vertices and normals to global lists
+            // Generate UVs for front face - project to XY plane and map to front face UV region
+            var meshUVs = GenerateFaceUVs(vertices, true);
+
+            // Add vertices, normals, and UVs to global lists
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
+            allUVs.AddRange(meshUVs);
 
             // Add triangles to submesh with face material (slot 0)
             Material faceMat = meshRenderer.sharedMaterials[0];
@@ -1123,7 +1231,7 @@ public class GlyphText3DGenerator : MonoBehaviour
     }
 
     private void GenerateCurvedMesh(List<List<Vector2>> boundaries, List<Vector3> allVertices,
-        List<Vector3> allNormals, Dictionary<Material, List<int>> submeshData)
+        List<Vector3> allNormals, List<Vector2> allUVs, Dictionary<Material, List<int>> submeshData)
     {
         if (boundaries == null || boundaries.Count == 0) return;
 
@@ -1392,9 +1500,13 @@ public class GlyphText3DGenerator : MonoBehaviour
                 }
             }
 
-            // Add vertices and normals to global lists
+            // Generate UVs for all vertices
+            var meshUVs = GenerateCurvedMeshUVs(vertices, layers, layerVertexMaps, layerSideVertexMaps, sortedVertices);
+
+            // Add vertices, normals, and UVs to global lists
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
+            allUVs.AddRange(meshUVs);
 
             // Add all local submesh triangles to global submeshData with vertex offset
             foreach (var kvp in localSubmeshData)
