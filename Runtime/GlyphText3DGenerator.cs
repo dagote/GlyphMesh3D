@@ -796,7 +796,13 @@ public class GlyphText3DGenerator : MonoBehaviour
             }
             else
             {
-                if (next == start && ordered.Count > 2) break;
+                // Check if we can close the loop back to start
+                if (neighbors.Contains(start) && ordered.Count > 2)
+                {
+                    // Successfully closed the loop
+                    break;
+                }
+                // If we can't close the loop, stop
                 break;
             }
 
@@ -804,7 +810,53 @@ public class GlyphText3DGenerator : MonoBehaviour
             orderedSet.Add(next);
             prev = current;
             current = next;
+
+            // Check if next is adjacent to start to close the loop
+            if (ordered.Count > 2 && GetNeighbors8(next).Contains(start))
+            {
+                // We've formed a closed loop
+                break;
+            }
         }
+
+        // Ensure the boundary forms a proper closed loop
+        // Check if first and last points are adjacent (within distance of sqrt(2) for 8-connected)
+        if (ordered.Count > 2)
+        {
+            Vector2Int first = ordered[0];
+            Vector2Int last = ordered[ordered.Count - 1];
+            float dist = Vector2Int.Distance(first, last);
+
+            // If the gap is too large, try to find intermediate points to close it
+            if (dist > 1.5f)
+            {
+                // Try to find a path back to start
+                var pathToStart = new List<Vector2Int>();
+                var visited = new HashSet<Vector2Int>(ordered);
+                var current2 = last;
+
+                for (int attempt = 0; attempt < 10 && current2 != first; attempt++)
+                {
+                    var neighbors = GetNeighbors8(current2)
+                        .Where(n => set.Contains(n) && (!visited.Contains(n) || n == first))
+                        .OrderBy(n => Vector2Int.Distance(n, first))
+                        .ToList();
+
+                    if (neighbors.Count == 0) break;
+
+                    var next = neighbors[0];
+                    if (next == first) break;
+
+                    pathToStart.Add(next);
+                    visited.Add(next);
+                    current2 = next;
+                }
+
+                // Add the closing path
+                ordered.AddRange(pathToStart);
+            }
+        }
+
         return ordered;
     }
 
