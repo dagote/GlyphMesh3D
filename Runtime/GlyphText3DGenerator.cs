@@ -179,7 +179,7 @@ public class GlyphText3DGenerator : MonoBehaviour
 
     [Header("Extrusion Settings")]
     [Range(0f, 100f)]
-    [SerializeField] private float extrusionDepth = 20f;
+    [SerializeField] private float extrusionDepth = 10f;
     [Range(0f, 50f)]
     [Tooltip("Controls the width of the extrusion offset perpendicular to the boundary")]
     [SerializeField] private float extrusionWidth = 0f;
@@ -188,11 +188,11 @@ public class GlyphText3DGenerator : MonoBehaviour
     [SerializeField] internal ExtrusionProfileCurve extrusionProfile = new ExtrusionProfileCurve();
 
     [Header("Advanced Simplification")]
-    [Range(0f, 10f)]
+    [Range(0f, 5f)]
     [SerializeField] private float simplifyArcLength = 1.5f;
     [Range(40f, 100f)]
     [SerializeField] private float cornerAngleThreshold = 80f;
-    [Range(0f, 10f)]
+    [Range(0f, 5f)]
     [SerializeField] private float postDpEpsilon = 1.2f;
 
     // Auto-assign and debug features removed; manual renderer material control is recommended.
@@ -488,6 +488,7 @@ public class GlyphText3DGenerator : MonoBehaviour
         return fontAsset.glyphTable.FirstOrDefault(g => g.index == glyphChar.glyphIndex);
     }
 
+
     private List<Vector2Int> ExtractGlyphEdgePixels(Texture2D atlasTexture, UnityEngine.TextCore.GlyphRect glyphRect)
     {
         try
@@ -526,6 +527,7 @@ public class GlyphText3DGenerator : MonoBehaviour
             return new List<Vector2Int>();
         }
     }
+    
 
     private bool IsEdge(int x, int y, int width, int height, Color[] pixels, float threshold)
     {
