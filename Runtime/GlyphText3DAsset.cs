@@ -30,7 +30,6 @@ public class GlyphText3DAsset : ScriptableObject
     [Tooltip("Extrusion profile curve used during generation")]
     public AnimationCurve extrusionProfile;
 
-    [Header("Generated Mesh Data")]
     // TODO: Add per-glyph mesh data storage
     // - Character to mesh mapping
     // - Vertex/triangle data per glyph
