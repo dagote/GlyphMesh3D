@@ -1650,7 +1650,10 @@ public class GlyphText3DGenerator : MonoBehaviour
     #region XAtlas UV Unwrapping
 
     /// <summary>
-    /// Generate UVs using xatlas library for proper face projection mapping
+    /// Generate clean UVs with manual unwrapping for proper face projection mapping
+    /// Front face: top-left quadrant (0, 0.5) to (0.5, 1.0)
+    /// Back face: top-right quadrant (0.5, 0.5) to (1.0, 1.0)
+    /// Extrusion sides: bottom half (0, 0) to (1.0, 0.5) as straight horizontal strips
     /// </summary>
     /// <param name="vertices">Mesh vertices</param>
     /// <param name="triangles">Mesh triangles</param>
@@ -1663,118 +1666,118 @@ public class GlyphText3DGenerator : MonoBehaviour
     {
         if (vertices == null || vertices.Length == 0 || triangles == null || triangles.Length == 0)
         {
-            Debug.LogWarning("GlyphText3D: Cannot generate xatlas UVs - invalid mesh data");
+            Debug.LogWarning("GlyphText3D: Cannot generate UVs - invalid mesh data");
             return null;
         }
 
         try
         {
-            // Check if xatlas library is available
-            if (!IsXAtlasAvailable())
-            {
-                Debug.LogWarning("GlyphText3D: xatlas library not available, using fallback UV generation");
-                return null;
-            }
-
             // Identify face groups (front, back, sides)
             var faceGroups = IdentifyFaceGroups(vertices, triangles, normals, layers, layerVertexMaps);
 
-            // Initialize xatlas
-            using (XAtlas atlas = new XAtlas())
+            // Initialize UV array
+            Vector2[] uvs = new Vector2[vertices.Length];
+
+            // Calculate bounds for XY coordinates
+            Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+
+            foreach (Vector3 v in vertices)
             {
-                // Configure pack options from serialized fields
-                atlas.padding = uvPadding;
-                atlas.texelsPerUnit = texelsPerUnit;
-                atlas.resolution = uvResolution;
-                atlas.maxChartSize = 0;
-                atlas.packAttempts = 4096;
-                atlas.bruteForce = false;
-
-                // Add mesh to atlas
-                if (!atlas.AddMesh(vertices, triangles, normals))
-                {
-                    Debug.LogError("GlyphText3D: Failed to add mesh to xatlas");
-                    return null;
-                }
-
-                // Compute charts (UV islands / parametrization)
-                if (!atlas.ComputeCharts())
-                {
-                    Debug.LogError("GlyphText3D: Failed to compute charts in xatlas");
-                    return null;
-                }
-
-                // Pack charts into texture atlas
-                if (!atlas.PackCharts())
-                {
-                    Debug.LogError("GlyphText3D: Failed to pack charts in xatlas");
-                    return null;
-                }
-
-                // Normalize UV coordinates to 0-1 range
-                atlas.Normalize();
-
-                // Get UV coordinates
-                Vector2[] uvs = atlas.GetUVs(0);
-
-                if (uvs == null || uvs.Length == 0)
-                {
-                    Debug.LogError("GlyphText3D: Failed to retrieve UVs from xatlas");
-                    return null;
-                }
-
-                // Check if xatlas split vertices
-                int newVertexCount = uvs.Length;
-                if (newVertexCount != vertices.Length)
-                {
-                    Debug.LogWarning($"GlyphText3D: xatlas split vertices (Original: {vertices.Length}, New: {newVertexCount}). Using fallback for gradient continuity.");
-                    // Vertex splitting breaks gradient continuity on extrusion sides
-                    // Fall back to custom UV generation that preserves topology
-                    return null;
-                }
-
-                // Apply custom strip unwrapping for extrusion sides to ensure gradient continuity
-                ApplyExtrusionStripUVs(ref uvs, vertices, triangles, normals, faceGroups, layers);
-
-                // Validate UV coverage
-                if (!ValidateUVCoverage(uvs))
-                {
-                    Debug.LogWarning("GlyphText3D: UV coverage validation found issues");
-                }
-
-                // Log UV generation statistics
-                int atlasWidth = atlas.GetAtlasWidth();
-                int atlasHeight = atlas.GetAtlasHeight();
-                int atlasCount = atlas.GetAtlasCount();
-                Debug.Log($"GlyphText3D: Generated UVs with xatlas - Atlas size: {atlasWidth}x{atlasHeight}, Atlas count: {atlasCount}, UV count: {uvs.Length}");
-
-                return uvs;
+                min = Vector3.Min(min, v);
+                max = Vector3.Max(max, v);
             }
+
+            float width = max.x - min.x;
+            float height = max.y - min.y;
+            if (width < 0.0001f) width = 1f;
+            if (height < 0.0001f) height = 1f;
+
+            // Get depth range for sides
+            float minZ = layers[0].depth * SCALE_FACTOR;
+            float maxZ = layers[layers.Count - 1].depth * SCALE_FACTOR;
+            float depthRange = maxZ - minZ;
+            if (depthRange < 0.0001f) depthRange = 1f;
+
+            // Calculate center for angular unwrapping
+            Vector2 center = new Vector2((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
+
+            // Process each face group
+            foreach (var kvp in faceGroups)
+            {
+                FaceGroup group = kvp.Value;
+                HashSet<int> vertexSet = new HashSet<int>();
+
+                // Collect all vertices in this group
+                foreach (int triIdx in group.triangleIndices)
+                {
+                    if (triIdx < triangles.Length - 2)
+                    {
+                        vertexSet.Add(triangles[triIdx]);
+                        vertexSet.Add(triangles[triIdx + 1]);
+                        vertexSet.Add(triangles[triIdx + 2]);
+                    }
+                }
+
+                // Apply UV mapping based on group type
+                if (group.groupType == "front")
+                {
+                    // Front face: top-left quadrant (0, 0.5) to (0.5, 1.0)
+                    foreach (int idx in vertexSet)
+                    {
+                        Vector3 v = vertices[idx];
+                        float u = (v.x - min.x) / width * 0.5f;  // Map to 0-0.5
+                        float vCoord = 0.5f + (v.y - min.y) / height * 0.5f;  // Map to 0.5-1.0
+                        uvs[idx] = new Vector2(u, vCoord);
+                    }
+                }
+                else if (group.groupType == "back")
+                {
+                    // Back face: top-right quadrant (0.5, 0.5) to (1.0, 1.0)
+                    foreach (int idx in vertexSet)
+                    {
+                        Vector3 v = vertices[idx];
+                        float u = 0.5f + (v.x - min.x) / width * 0.5f;  // Map to 0.5-1.0
+                        float vCoord = 0.5f + (v.y - min.y) / height * 0.5f;  // Map to 0.5-1.0
+                        uvs[idx] = new Vector2(u, vCoord);
+                    }
+                }
+                else if (group.groupType == "side")
+                {
+                    // Extrusion sides: bottom half (0, 0) to (1.0, 0.5) as straight horizontal strips
+                    // U: angular position around perimeter (0-1)
+                    // V: depth normalized (0 at front, 0.5 at back) for bottom half of UV space
+                    foreach (int idx in vertexSet)
+                    {
+                        Vector3 v = vertices[idx];
+
+                        // Calculate angular position (U coordinate)
+                        Vector2 dir = new Vector2(v.x, v.y) - center;
+                        float angle = Mathf.Atan2(dir.y, dir.x);
+                        float u = (angle + Mathf.PI) / (2f * Mathf.PI); // Normalize to 0-1
+
+                        // Calculate depth position (V coordinate) - map to bottom half (0-0.5)
+                        float depth = v.z;
+                        float vCoord = (depth - minZ) / depthRange * 0.5f;  // Map to 0-0.5
+
+                        uvs[idx] = new Vector2(u, vCoord);
+                    }
+                }
+            }
+
+            // Validate UV coverage
+            if (!ValidateUVCoverage(uvs))
+            {
+                Debug.LogWarning("GlyphText3D: UV coverage validation found issues");
+            }
+
+            Debug.Log($"GlyphText3D: Generated clean manual UVs - Vertex count: {uvs.Length}");
+            return uvs;
         }
         catch (Exception ex)
         {
-            Debug.LogError($"GlyphText3D: Exception during xatlas UV generation: {ex.Message}\n{ex.StackTrace}");
+            Debug.LogError($"GlyphText3D: Exception during UV generation: {ex.Message}\n{ex.StackTrace}");
             return null;
-        }
-    }
-
-    /// <summary>
-    /// Check if xatlas library is available
-    /// </summary>
-    private bool IsXAtlasAvailable()
-    {
-        try
-        {
-            // Try to create an atlas instance to verify the library is loaded
-            using (XAtlas atlas = new XAtlas())
-            {
-                return true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"GlyphText3D: xatlas library not available: {ex.Message}");
-            return false;
         }
     }
 
@@ -1855,174 +1858,6 @@ public class GlyphText3DGenerator : MonoBehaviour
         }
 
         return groups;
-    }
-
-    /// <summary>
-    /// Apply proper strip unwrapping to extrusion sides for gradient continuity
-    /// Keeps xatlas UVs for front/back faces, replaces side UVs with walking unfold
-    /// </summary>
-    private void ApplyExtrusionStripUVs(ref Vector2[] uvs, Vector3[] vertices, int[] triangles,
-        Vector3[] normals, Dictionary<string, FaceGroup> faceGroups, List<ExtrusionLayer> layers)
-    {
-        if (layers == null || layers.Count < 2)
-            return;
-
-        // Identify which vertices belong to side faces
-        HashSet<int> sideVertices = new HashSet<int>();
-        foreach (var kvp in faceGroups)
-        {
-            if (kvp.Value.groupType == "side")
-            {
-                foreach (int triIdx in kvp.Value.triangleIndices)
-                {
-                    // triangleIndices stores the start index of each triangle
-                    if (triIdx < triangles.Length - 2)
-                    {
-                        sideVertices.Add(triangles[triIdx]);
-                        sideVertices.Add(triangles[triIdx + 1]);
-                        sideVertices.Add(triangles[triIdx + 2]);
-                    }
-                }
-            }
-        }
-
-        if (sideVertices.Count == 0)
-            return;
-
-        // For each side vertex, calculate UV based on:
-        // U: angular position around the glyph perimeter (0-1 wrapping)
-        // V: normalized depth (0 at front, 1 at back)
-
-        // Calculate center point for angular calculation
-        Vector2 center = Vector2.zero;
-        int count = 0;
-        foreach (int idx in sideVertices)
-        {
-            center += new Vector2(vertices[idx].x, vertices[idx].y);
-            count++;
-        }
-        if (count > 0)
-            center /= count;
-
-        // Get depth range
-        float minZ = layers[0].depth * SCALE_FACTOR;
-        float maxZ = layers[layers.Count - 1].depth * SCALE_FACTOR;
-        float depthRange = maxZ - minZ;
-        if (depthRange < 0.0001f) depthRange = 1f;
-
-        // Apply strip UVs: continuous angular unwrap + depth
-        foreach (int idx in sideVertices)
-        {
-            Vector3 v = vertices[idx];
-
-            // Calculate angular position (U coordinate)
-            Vector2 dir = new Vector2(v.x, v.y) - center;
-            float angle = Mathf.Atan2(dir.y, dir.x);
-            float u = (angle + Mathf.PI) / (2f * Mathf.PI); // Normalize to 0-1
-
-            // Calculate depth position (V coordinate)
-            float depth = v.z;
-            float vCoord = (depth - minZ) / depthRange;
-
-            uvs[idx] = new Vector2(u, vCoord);
-        }
-
-        Debug.Log($"GlyphText3D: Applied strip unwrapping to {sideVertices.Count} side vertices for gradient continuity");
-    }
-
-    /// <summary>
-    /// Setup planar projection for front/back faces
-    /// </summary>
-    private void SetupPlanarProjection(Vector3[] vertices, Vector3 normal, List<int> triangleIndices,
-        ref Vector2[] uvs)
-    {
-        if (triangleIndices == null || triangleIndices.Count == 0)
-            return;
-
-        // Find bounds for normalization
-        Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-        Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
-
-        HashSet<int> vertexSet = new HashSet<int>();
-        foreach (int triIdx in triangleIndices)
-        {
-            vertexSet.Add(triIdx);
-        }
-
-        foreach (int idx in vertexSet)
-        {
-            if (idx < vertices.Length)
-            {
-                Vector3 v = vertices[idx];
-                min = Vector3.Min(min, v);
-                max = Vector3.Max(max, v);
-            }
-        }
-
-        float width = max.x - min.x;
-        float height = max.y - min.y;
-
-        if (width < 0.0001f) width = 1f;
-        if (height < 0.0001f) height = 1f;
-
-        // Project vertices onto XY plane and normalize
-        foreach (int idx in vertexSet)
-        {
-            if (idx < vertices.Length && idx < uvs.Length)
-            {
-                Vector3 v = vertices[idx];
-                float u = (v.x - min.x) / width;
-                float vCoord = (v.y - min.y) / height;
-                uvs[idx] = new Vector2(u, vCoord);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Setup cylindrical projection for extrusion sides
-    /// </summary>
-    private void SetupCylindricalProjection(Vector3[] vertices, List<int> triangleIndices,
-        float depthMin, float depthMax, ref Vector2[] uvs)
-    {
-        if (triangleIndices == null || triangleIndices.Count == 0)
-            return;
-
-        HashSet<int> vertexSet = new HashSet<int>();
-        foreach (int triIdx in triangleIndices)
-        {
-            vertexSet.Add(triIdx);
-        }
-
-        // Calculate angle around center for each vertex
-        Vector2 center = Vector2.zero;
-        int count = 0;
-        foreach (int idx in vertexSet)
-        {
-            if (idx < vertices.Length)
-            {
-                center += new Vector2(vertices[idx].x, vertices[idx].y);
-                count++;
-            }
-        }
-        if (count > 0)
-            center /= count;
-
-        // Unwrap as cylindrical coordinates
-        foreach (int idx in vertexSet)
-        {
-            if (idx < vertices.Length && idx < uvs.Length)
-            {
-                Vector3 v = vertices[idx];
-                Vector2 dir = new Vector2(v.x, v.y) - center;
-                float angle = Mathf.Atan2(dir.y, dir.x);
-                float u = (angle + Mathf.PI) / (2f * Mathf.PI);  // Normalize to 0-1
-
-                float depth = v.z;
-                float vCoord = depthMax > depthMin ? (depth - depthMin) / (depthMax - depthMin) : 0.5f;
-
-                uvs[idx] = new Vector2(u, vCoord);
-            }
-        }
     }
 
     /// <summary>
