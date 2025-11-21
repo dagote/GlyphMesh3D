@@ -5,170 +5,58 @@ using UnityEngine;
 
 /// <summary>
 /// C# wrapper for xatlas library (xatlasLib.dll) for UV unwrapping
+/// Based on guycalledfrank/xatlasLib wrapper
 /// </summary>
 public class XAtlas : IDisposable
 {
     private IntPtr atlasPtr = IntPtr.Zero;
     private bool isDisposed = false;
 
-    // Chart options configuration
-    public ChartOptions chartOptions = new ChartOptions();
-
-    // Pack options configuration
-    public PackOptions packOptions = new PackOptions();
-
-    #region Native Structures
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct ChartOptions
-    {
-        public float maxChartArea;
-        public float maxBoundaryLength;
-        public float normalDeviationWeight;
-        public float roundnessWeight;
-        public float straightnessWeight;
-        public float normalSeamWeight;
-        public float textureSeamWeight;
-        public float maxCost;
-        public int maxIterations;
-        public int useInputMeshUvs;
-        public int fixWinding;
-
-        public ChartOptions(bool useDefaults = true)
-        {
-            if (useDefaults)
-            {
-                maxChartArea = 0f;
-                maxBoundaryLength = 0f;
-                normalDeviationWeight = 2.0f;
-                roundnessWeight = 0.01f;
-                straightnessWeight = 6.0f;
-                normalSeamWeight = 4.0f;
-                textureSeamWeight = 0.5f;
-                maxCost = 2.0f;
-                maxIterations = 1;  // For planar faces
-                useInputMeshUvs = 0;
-                fixWinding = 0;
-            }
-            else
-            {
-                maxChartArea = 0f;
-                maxBoundaryLength = 0f;
-                normalDeviationWeight = 0f;
-                roundnessWeight = 0f;
-                straightnessWeight = 0f;
-                normalSeamWeight = 0f;
-                textureSeamWeight = 0f;
-                maxCost = 0f;
-                maxIterations = 0;
-                useInputMeshUvs = 0;
-                fixWinding = 0;
-            }
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct PackOptions
-    {
-        public int maxChartSize;
-        public int padding;
-        public float texelsPerUnit;
-        public int resolution;
-        public int bilinear;
-        public int blockAlign;
-        public int bruteForce;
-        public int createImage;
-        public int rotateChartsToAxis;
-        public int rotateCharts;
-
-        public PackOptions(bool useDefaults = true)
-        {
-            if (useDefaults)
-            {
-                maxChartSize = 0;
-                padding = 4;  // 4 pixels between islands
-                texelsPerUnit = 0f;
-                resolution = 1024;  // Default texture size
-                bilinear = 1;
-                blockAlign = 0;
-                bruteForce = 0;
-                createImage = 0;
-                rotateChartsToAxis = 1;
-                rotateCharts = 1;
-            }
-            else
-            {
-                maxChartSize = 0;
-                padding = 0;
-                texelsPerUnit = 0f;
-                resolution = 0;
-                bilinear = 0;
-                blockAlign = 0;
-                bruteForce = 0;
-                createImage = 0;
-                rotateChartsToAxis = 0;
-                rotateCharts = 0;
-            }
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MeshDecl
-    {
-        public IntPtr vertexPositionData;
-        public IntPtr vertexNormalData;
-        public IntPtr vertexUvData;
-        public IntPtr indexData;
-        public int vertexCount;
-        public int indexCount;
-        public int vertexPositionStride;
-        public int vertexNormalStride;
-        public int vertexUvStride;
-        public int indexFormat;
-    }
-
-    #endregion
+    // Configuration options
+    public int padding = 4;
+    public float texelsPerUnit = 1.0f;
+    public int resolution = 1024;
+    public int maxChartSize = 0;
+    public int packAttempts = 4096;
+    public bool bruteForce = false;
 
     #region Native Functions
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern IntPtr xatlas_Create();
+    private static extern IntPtr xatlasCreateAtlas();
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void xatlas_Destroy(IntPtr atlas);
+    private static extern void xatlasClear(IntPtr atlas);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_AddMesh(IntPtr atlas, ref MeshDecl meshDecl, uint meshCountHint);
+    private static extern void xatlasAddMesh(IntPtr atlas, int vertexCount, IntPtr positions, IntPtr normals, IntPtr uv, int indexCount, int[] indices32);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void xatlas_AddMeshJoin(IntPtr atlas);
+    private static extern void xatlasAddUVMesh(IntPtr atlas, int vertexCount, IntPtr uv, int indexCount, int[] indices32, bool allowRotate);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_ComputeCharts(IntPtr atlas, ref ChartOptions chartOptions);
+    private static extern void xatlasParametrize(IntPtr atlas);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_PackCharts(IntPtr atlas, ref PackOptions packOptions);
+    private static extern void xatlasPack(IntPtr atlas, int attempts, float texelsPerUnit, int resolution, int maxChartSize, int padding, bool bruteForce);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_GetVertexCount(IntPtr atlas, int meshIndex);
+    private static extern void xatlasNormalize(IntPtr atlas, int[] atlasSizes);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_GetIndexCount(IntPtr atlas, int meshIndex);
+    private static extern int xatlasGetAtlasCount(IntPtr atlas);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void xatlas_GetVertexArray(IntPtr atlas, int meshIndex, IntPtr outVertexArray);
+    private static extern int xatlasGetAtlasIndex(IntPtr atlas, int meshIndex, int chartIndex);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void xatlas_GetIndexArray(IntPtr atlas, int meshIndex, IntPtr outIndexArray);
+    private static extern int xatlasGetVertexCount(IntPtr atlas, int meshIndex);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void xatlas_GetUVs(IntPtr atlas, int meshIndex, IntPtr outUVs);
+    private static extern int xatlasGetIndexCount(IntPtr atlas, int meshIndex);
 
     [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_GetWidth(IntPtr atlas);
-
-    [DllImport("xatlasLib", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int xatlas_GetHeight(IntPtr atlas);
+    private static extern void xatlasGetData(IntPtr atlas, int meshIndex, IntPtr outUV, IntPtr outRef, IntPtr outIndices);
 
     #endregion
 
@@ -177,15 +65,11 @@ public class XAtlas : IDisposable
     /// </summary>
     public XAtlas()
     {
-        atlasPtr = xatlas_Create();
+        atlasPtr = xatlasCreateAtlas();
         if (atlasPtr == IntPtr.Zero)
         {
             throw new Exception("Failed to create xatlas instance");
         }
-
-        // Set default options
-        chartOptions = new ChartOptions(true);
-        packOptions = new PackOptions(true);
     }
 
     /// <summary>
@@ -215,77 +99,59 @@ public class XAtlas : IDisposable
             return false;
         }
 
-        // Convert Unity Vector3[] to float array for positions
-        float[] positions = new float[vertices.Length * 3];
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            positions[i * 3 + 0] = vertices[i].x;
-            positions[i * 3 + 1] = vertices[i].y;
-            positions[i * 3 + 2] = vertices[i].z;
-        }
-
-        // Convert normals if provided, otherwise use null
-        float[] normalData = null;
-        if (normals != null && normals.Length == vertices.Length)
-        {
-            normalData = new float[normals.Length * 3];
-            for (int i = 0; i < normals.Length; i++)
-            {
-                normalData[i * 3 + 0] = normals[i].x;
-                normalData[i * 3 + 1] = normals[i].y;
-                normalData[i * 3 + 2] = normals[i].z;
-            }
-        }
-
-        // Convert indices to uint array
-        uint[] indices = new uint[triangles.Length];
-        for (int i = 0; i < triangles.Length; i++)
-        {
-            indices[i] = (uint)triangles[i];
-        }
-
-        // Pin arrays in memory
-        GCHandle posHandle = GCHandle.Alloc(positions, GCHandleType.Pinned);
-        GCHandle normalHandle = normalData != null ? GCHandle.Alloc(normalData, GCHandleType.Pinned) : default(GCHandle);
-        GCHandle indexHandle = GCHandle.Alloc(indices, GCHandleType.Pinned);
-
         try
         {
-            MeshDecl meshDecl = new MeshDecl
+            // Convert Unity Vector3[] to float array for positions
+            float[] positions = new float[vertices.Length * 3];
+            for (int i = 0; i < vertices.Length; i++)
             {
-                vertexPositionData = posHandle.AddrOfPinnedObject(),
-                vertexNormalData = normalData != null ? normalHandle.AddrOfPinnedObject() : IntPtr.Zero,
-                vertexUvData = IntPtr.Zero,
-                indexData = indexHandle.AddrOfPinnedObject(),
-                vertexCount = vertices.Length,
-                indexCount = triangles.Length,
-                vertexPositionStride = sizeof(float) * 3,
-                vertexNormalStride = normalData != null ? sizeof(float) * 3 : 0,
-                vertexUvStride = 0,
-                indexFormat = 1  // 32-bit indices
-            };
-
-            int result = xatlas_AddMesh(atlasPtr, ref meshDecl, 0);
-
-            if (result != 0)
-            {
-                Debug.LogError($"XAtlas: AddMesh failed with error code {result}");
-                return false;
+                positions[i * 3 + 0] = vertices[i].x;
+                positions[i * 3 + 1] = vertices[i].y;
+                positions[i * 3 + 2] = vertices[i].z;
             }
 
-            return true;
+            // Convert normals if provided
+            float[] normalData = null;
+            if (normals != null && normals.Length == vertices.Length)
+            {
+                normalData = new float[normals.Length * 3];
+                for (int i = 0; i < normals.Length; i++)
+                {
+                    normalData[i * 3 + 0] = normals[i].x;
+                    normalData[i * 3 + 1] = normals[i].y;
+                    normalData[i * 3 + 2] = normals[i].z;
+                }
+            }
+
+            // Pin arrays in memory
+            GCHandle posHandle = GCHandle.Alloc(positions, GCHandleType.Pinned);
+            GCHandle normalHandle = normalData != null ? GCHandle.Alloc(normalData, GCHandleType.Pinned) : default(GCHandle);
+
+            try
+            {
+                IntPtr posPtr = posHandle.AddrOfPinnedObject();
+                IntPtr normalPtr = normalData != null ? normalHandle.AddrOfPinnedObject() : IntPtr.Zero;
+
+                xatlasAddMesh(atlasPtr, vertices.Length, posPtr, normalPtr, IntPtr.Zero, triangles.Length, triangles);
+
+                return true;
+            }
+            finally
+            {
+                posHandle.Free();
+                if (normalHandle.IsAllocated)
+                    normalHandle.Free();
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            posHandle.Free();
-            if (normalHandle.IsAllocated)
-                normalHandle.Free();
-            indexHandle.Free();
+            Debug.LogError($"XAtlas: Exception in AddMesh - {ex.Message}");
+            return false;
         }
     }
 
     /// <summary>
-    /// Compute charts (UV islands) for all added meshes
+    /// Compute UV parametrization (charts/islands)
     /// </summary>
     /// <returns>True if successful</returns>
     public bool ComputeCharts()
@@ -296,15 +162,16 @@ public class XAtlas : IDisposable
             return false;
         }
 
-        int result = xatlas_ComputeCharts(atlasPtr, ref chartOptions);
-
-        if (result != 0)
+        try
         {
-            Debug.LogError($"XAtlas: ComputeCharts failed with error code {result}");
+            xatlasParametrize(atlasPtr);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"XAtlas: Exception in ComputeCharts - {ex.Message}");
             return false;
         }
-
-        return true;
     }
 
     /// <summary>
@@ -319,15 +186,41 @@ public class XAtlas : IDisposable
             return false;
         }
 
-        int result = xatlas_PackCharts(atlasPtr, ref packOptions);
-
-        if (result != 0)
+        try
         {
-            Debug.LogError($"XAtlas: PackCharts failed with error code {result}");
+            xatlasPack(atlasPtr, packAttempts, texelsPerUnit, resolution, maxChartSize, padding, bruteForce);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"XAtlas: Exception in PackCharts - {ex.Message}");
             return false;
         }
+    }
 
-        return true;
+    /// <summary>
+    /// Normalize UV coordinates to 0-1 range
+    /// </summary>
+    public void Normalize()
+    {
+        if (atlasPtr == IntPtr.Zero)
+            return;
+
+        try
+        {
+            int atlasCount = xatlasGetAtlasCount(atlasPtr);
+            int[] atlasSizes = new int[atlasCount * 2]; // width, height pairs
+            for (int i = 0; i < atlasCount; i++)
+            {
+                atlasSizes[i * 2 + 0] = resolution;
+                atlasSizes[i * 2 + 1] = resolution;
+            }
+            xatlasNormalize(atlasPtr, atlasSizes);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"XAtlas: Exception in Normalize - {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -343,92 +236,88 @@ public class XAtlas : IDisposable
             return null;
         }
 
-        int vertexCount = xatlas_GetVertexCount(atlasPtr, meshIndex);
-        if (vertexCount <= 0)
-        {
-            Debug.LogError($"XAtlas: Invalid vertex count {vertexCount} for mesh {meshIndex}");
-            return null;
-        }
-
-        float[] uvData = new float[vertexCount * 2];
-        GCHandle uvHandle = GCHandle.Alloc(uvData, GCHandleType.Pinned);
-
         try
         {
-            xatlas_GetUVs(atlasPtr, meshIndex, uvHandle.AddrOfPinnedObject());
-
-            Vector2[] uvs = new Vector2[vertexCount];
-            for (int i = 0; i < vertexCount; i++)
+            int vertexCount = xatlasGetVertexCount(atlasPtr, meshIndex);
+            if (vertexCount <= 0)
             {
-                uvs[i] = new Vector2(uvData[i * 2 + 0], uvData[i * 2 + 1]);
+                Debug.LogError($"XAtlas: Invalid vertex count {vertexCount} for mesh {meshIndex}");
+                return null;
             }
 
-            return uvs;
+            // Allocate arrays for output data
+            float[] uvData = new float[vertexCount * 2];
+            int[] xrefData = new int[vertexCount];
+            int indexCount = xatlasGetIndexCount(atlasPtr, meshIndex);
+            int[] indexData = new int[indexCount];
+
+            // Pin arrays
+            GCHandle uvHandle = GCHandle.Alloc(uvData, GCHandleType.Pinned);
+            GCHandle xrefHandle = GCHandle.Alloc(xrefData, GCHandleType.Pinned);
+            GCHandle indexHandle = GCHandle.Alloc(indexData, GCHandleType.Pinned);
+
+            try
+            {
+                xatlasGetData(atlasPtr, meshIndex, uvHandle.AddrOfPinnedObject(),
+                             xrefHandle.AddrOfPinnedObject(), indexHandle.AddrOfPinnedObject());
+
+                // Convert to Vector2 array
+                Vector2[] uvs = new Vector2[vertexCount];
+                for (int i = 0; i < vertexCount; i++)
+                {
+                    uvs[i] = new Vector2(uvData[i * 2 + 0], uvData[i * 2 + 1]);
+                }
+
+                return uvs;
+            }
+            finally
+            {
+                uvHandle.Free();
+                xrefHandle.Free();
+                indexHandle.Free();
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            uvHandle.Free();
+            Debug.LogError($"XAtlas: Exception in GetUVs - {ex.Message}");
+            return null;
         }
     }
 
     /// <summary>
-    /// Get the atlas texture width after packing
+    /// Get the number of atlases created
+    /// </summary>
+    public int GetAtlasCount()
+    {
+        if (atlasPtr == IntPtr.Zero)
+            return 0;
+        return xatlasGetAtlasCount(atlasPtr);
+    }
+
+    /// <summary>
+    /// Get atlas dimensions (returns resolution since we set fixed size)
     /// </summary>
     public int GetAtlasWidth()
     {
-        if (atlasPtr == IntPtr.Zero)
-            return 0;
-        return xatlas_GetWidth(atlasPtr);
+        return resolution;
     }
 
     /// <summary>
-    /// Get the atlas texture height after packing
+    /// Get atlas dimensions (returns resolution since we set fixed size)
     /// </summary>
     public int GetAtlasHeight()
     {
-        if (atlasPtr == IntPtr.Zero)
-            return 0;
-        return xatlas_GetHeight(atlasPtr);
+        return resolution;
     }
 
     /// <summary>
-    /// Get new vertex positions after UV generation (xatlas may split vertices)
+    /// Get new vertex count after UV generation (xatlas may split vertices)
     /// </summary>
-    public Vector3[] GetVertices(Vector3[] originalVertices, int meshIndex = 0)
+    public int GetVertexCount(int meshIndex = 0)
     {
-        if (atlasPtr == IntPtr.Zero || originalVertices == null)
-            return null;
-
-        int vertexCount = xatlas_GetVertexCount(atlasPtr, meshIndex);
-        int indexCount = xatlas_GetIndexCount(atlasPtr, meshIndex);
-
-        if (vertexCount <= 0 || indexCount <= 0)
-            return null;
-
-        // Get the vertex remapping indices
-        uint[] vertexArray = new uint[vertexCount];
-        GCHandle vertHandle = GCHandle.Alloc(vertexArray, GCHandleType.Pinned);
-
-        try
-        {
-            xatlas_GetVertexArray(atlasPtr, meshIndex, vertHandle.AddrOfPinnedObject());
-
-            Vector3[] newVertices = new Vector3[vertexCount];
-            for (int i = 0; i < vertexCount; i++)
-            {
-                uint originalIndex = vertexArray[i];
-                if (originalIndex < originalVertices.Length)
-                {
-                    newVertices[i] = originalVertices[originalIndex];
-                }
-            }
-
-            return newVertices;
-        }
-        finally
-        {
-            vertHandle.Free();
-        }
+        if (atlasPtr == IntPtr.Zero)
+            return 0;
+        return xatlasGetVertexCount(atlasPtr, meshIndex);
     }
 
     /// <summary>
@@ -439,28 +328,64 @@ public class XAtlas : IDisposable
         if (atlasPtr == IntPtr.Zero)
             return null;
 
-        int indexCount = xatlas_GetIndexCount(atlasPtr, meshIndex);
-        if (indexCount <= 0)
-            return null;
+        try
+        {
+            int indexCount = xatlasGetIndexCount(atlasPtr, meshIndex);
+            if (indexCount <= 0)
+                return null;
 
-        uint[] indexArray = new uint[indexCount];
-        GCHandle indexHandle = GCHandle.Alloc(indexArray, GCHandleType.Pinned);
+            int[] indexData = new int[indexCount];
+            GCHandle indexHandle = GCHandle.Alloc(indexData, GCHandleType.Pinned);
+
+            try
+            {
+                // We need to call GetData with null for UV and xref to get just indices
+                xatlasGetData(atlasPtr, meshIndex, IntPtr.Zero, IntPtr.Zero, indexHandle.AddrOfPinnedObject());
+                return indexData;
+            }
+            finally
+            {
+                indexHandle.Free();
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"XAtlas: Exception in GetIndices - {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get vertex reference array (maps new vertices back to original)
+    /// </summary>
+    public int[] GetVertexReferences(int meshIndex = 0)
+    {
+        if (atlasPtr == IntPtr.Zero)
+            return null;
 
         try
         {
-            xatlas_GetIndexArray(atlasPtr, meshIndex, indexHandle.AddrOfPinnedObject());
+            int vertexCount = xatlasGetVertexCount(atlasPtr, meshIndex);
+            if (vertexCount <= 0)
+                return null;
 
-            int[] indices = new int[indexCount];
-            for (int i = 0; i < indexCount; i++)
+            int[] xrefData = new int[vertexCount];
+            GCHandle xrefHandle = GCHandle.Alloc(xrefData, GCHandleType.Pinned);
+
+            try
             {
-                indices[i] = (int)indexArray[i];
+                xatlasGetData(atlasPtr, meshIndex, IntPtr.Zero, xrefHandle.AddrOfPinnedObject(), IntPtr.Zero);
+                return xrefData;
             }
-
-            return indices;
+            finally
+            {
+                xrefHandle.Free();
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            indexHandle.Free();
+            Debug.LogError($"XAtlas: Exception in GetVertexReferences - {ex.Message}");
+            return null;
         }
     }
 
@@ -471,7 +396,7 @@ public class XAtlas : IDisposable
     {
         if (!isDisposed && atlasPtr != IntPtr.Zero)
         {
-            xatlas_Destroy(atlasPtr);
+            xatlasClear(atlasPtr);
             atlasPtr = IntPtr.Zero;
             isDisposed = true;
         }

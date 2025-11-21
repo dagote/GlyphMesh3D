@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -1681,17 +1682,13 @@ public class GlyphText3DGenerator : MonoBehaviour
             // Initialize xatlas
             using (XAtlas atlas = new XAtlas())
             {
-                // Configure chart options for face projection mapping
-                atlas.chartOptions.maxIterations = 1;  // For planar faces
-                atlas.chartOptions.normalDeviationWeight = 2.0f;
-                atlas.chartOptions.roundnessWeight = 0.01f;
-                atlas.chartOptions.straightnessWeight = 6.0f;
-
                 // Configure pack options from serialized fields
-                atlas.packOptions.padding = uvPadding;
-                atlas.packOptions.texelsPerUnit = texelsPerUnit;
-                atlas.packOptions.resolution = uvResolution;
-                atlas.packOptions.rotateCharts = 1;  // Allow rotation for better packing
+                atlas.padding = uvPadding;
+                atlas.texelsPerUnit = texelsPerUnit;
+                atlas.resolution = uvResolution;
+                atlas.maxChartSize = 0;
+                atlas.packAttempts = 4096;
+                atlas.bruteForce = false;
 
                 // Add mesh to atlas
                 if (!atlas.AddMesh(vertices, triangles, normals))
@@ -1700,7 +1697,7 @@ public class GlyphText3DGenerator : MonoBehaviour
                     return null;
                 }
 
-                // Compute charts (UV islands)
+                // Compute charts (UV islands / parametrization)
                 if (!atlas.ComputeCharts())
                 {
                     Debug.LogError("GlyphText3D: Failed to compute charts in xatlas");
@@ -1713,6 +1710,9 @@ public class GlyphText3DGenerator : MonoBehaviour
                     Debug.LogError("GlyphText3D: Failed to pack charts in xatlas");
                     return null;
                 }
+
+                // Normalize UV coordinates to 0-1 range
+                atlas.Normalize();
 
                 // Get UV coordinates
                 Vector2[] uvs = atlas.GetUVs(0);
@@ -1732,7 +1732,8 @@ public class GlyphText3DGenerator : MonoBehaviour
                 // Log UV generation statistics
                 int atlasWidth = atlas.GetAtlasWidth();
                 int atlasHeight = atlas.GetAtlasHeight();
-                Debug.Log($"GlyphText3D: Generated UVs with xatlas - Atlas size: {atlasWidth}x{atlasHeight}, UV count: {uvs.Length}");
+                int atlasCount = atlas.GetAtlasCount();
+                Debug.Log($"GlyphText3D: Generated UVs with xatlas - Atlas size: {atlasWidth}x{atlasHeight}, Atlas count: {atlasCount}, UV count: {uvs.Length}");
 
                 // Note: xatlas may split vertices to create proper UV seams
                 // We need to handle vertex splitting if it occurs
