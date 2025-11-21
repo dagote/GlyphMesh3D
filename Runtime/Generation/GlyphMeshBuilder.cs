@@ -441,6 +441,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (vertices.Count == 0)
                 return uvs;
 
+            // Calculate bounds in XY plane (ignore Z for UV mapping)
             Vector3 min = vertices[0];
             Vector3 max = vertices[0];
 
@@ -448,8 +449,10 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 min.x = Mathf.Min(min.x, v.x);
                 min.y = Mathf.Min(min.y, v.y);
+                min.z = Mathf.Min(min.z, v.z);
                 max.x = Mathf.Max(max.x, v.x);
                 max.y = Mathf.Max(max.y, v.y);
+                max.z = Mathf.Max(max.z, v.z);
             }
 
             float width = max.x - min.x;
@@ -458,17 +461,35 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (width < 0.0001f) width = 1f;
             if (height < 0.0001f) height = 1f;
 
-            float uMin = 0f;
-            float uMax = 0.25f;
-            float vMin = isFrontFace ? 0.5f : 0f;
-            float vMax = isFrontFace ? 1.0f : 0.5f;
+            // Determine if this is a face or side based on Z position
+            bool isFace = Mathf.Approximately(vertices[0].z, min.z) || Mathf.Approximately(vertices[0].z, max.z);
 
             foreach (var v in vertices)
             {
-                float normalizedX = (v.x - min.x) / width;
-                float normalizedY = (v.y - min.y) / height;
-                float u = Mathf.Lerp(uMin, uMax, normalizedX);
-                float vCoord = Mathf.Lerp(vMin, vMax, normalizedY);
+                float u, vCoord;
+
+                if (isFace)
+                {
+                    // Front and back faces: use full UV space (0-1) for proper texture mapping
+                    float normalizedX = (v.x - min.x) / width;
+                    float normalizedY = (v.y - min.y) / height;
+                    u = normalizedX;
+                    vCoord = normalizedY;
+                }
+                else
+                {
+                    // Side faces: use position-based UV mapping
+                    // U coordinate based on position around perimeter
+                    // V coordinate based on depth (Z)
+                    float depthT = (v.z - min.z) / Mathf.Max(max.z - min.z, 0.0001f);
+
+                    // Calculate perimeter position for U coordinate
+                    float perimeterU = (v.x - min.x) / width;
+
+                    u = perimeterU;
+                    vCoord = depthT;
+                }
+
                 uvs.Add(new Vector2(u, vCoord));
             }
 
