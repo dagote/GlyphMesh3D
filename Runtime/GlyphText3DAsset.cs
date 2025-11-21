@@ -39,3 +39,4 @@ public class GlyphText3DAsset : ScriptableObject
     // Placeholder for future implementation
     // public GlyphMeshData[] glyphMeshes;
 }
+
