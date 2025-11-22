@@ -83,7 +83,11 @@ namespace LanternPines.GlyphMesh3D.Generation
             var submeshData = new Dictionary<Material, List<int>>();
 
             // Determine if we use curved extrusion
-            bool useCurvedExtrusion = settings.ExtrusionProfile != null && settings.ExtrusionProfile.KeyframeCount > 0;
+            // If extrusion depth is too shallow (< 0.1), disable extrusion and back face
+            float extrusionDepth = settings.ExtrusionProfile?.extrusionDepth ?? 0f;
+            bool useCurvedExtrusion = settings.ExtrusionProfile != null &&
+                                     settings.ExtrusionProfile.KeyframeCount > 0 &&
+                                     extrusionDepth >= 0.1f;
 
             if (useCurvedExtrusion)
             {
