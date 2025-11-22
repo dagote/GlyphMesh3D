@@ -121,9 +121,91 @@ namespace LanternPines.GlyphMesh3D.Generation
                 combinedMesh.SetTriangles(tris, slotIdx);
             }
 
+            // Correct triangle winding orders to ensure outward-facing normals
+            CorrectTriangleWindingOrders(allVertices, submeshData, settings.ExtrusionProfile?.extrusionDepth ?? 0f);
+
+            // Re-assign corrected triangles to submeshes
+            for (int slotIdx = 0; slotIdx < slotMap.TotalSlots; slotIdx++)
+            {
+                Material slotMat = slotIdx < materials.Length ? materials[slotIdx] : null;
+
+                var tris = new int[0];
+                if (slotMat != null && submeshData.ContainsKey(slotMat))
+                {
+                    tris = submeshData[slotMat].ToArray();
+                }
+
+                combinedMesh.SetTriangles(tris, slotIdx);
+            }
+
             combinedMesh.RecalculateBounds();
 
             return combinedMesh;
+        }
+
+        /// <summary>
+        /// Corrects triangle winding orders to ensure consistent outward-facing normals
+        /// </summary>
+        private static void CorrectTriangleWindingOrders(List<Vector3> vertices, Dictionary<Material, List<int>> submeshData, float extrusionDepth)
+        {
+            // Calculate mesh centroid for extrusion normal checks
+            Vector3 centroid = Vector3.zero;
+            foreach (var v in vertices) centroid += v;
+            centroid /= vertices.Count;
+
+            float frontZ = 0f;
+            float backZ = extrusionDepth * SCALE_FACTOR;
+            float zTolerance = 0.001f;
+
+            foreach (var kvp in submeshData)
+            {
+                var triangles = kvp.Value;
+
+                for (int i = 0; i < triangles.Count; i += 3)
+                {
+                    int idx0 = triangles[i];
+                    int idx1 = triangles[i + 1];
+                    int idx2 = triangles[i + 2];
+
+                    Vector3 v0 = vertices[idx0];
+                    Vector3 v1 = vertices[idx1];
+                    Vector3 v2 = vertices[idx2];
+
+                    // Calculate face normal
+                    Vector3 edge1 = v1 - v0;
+                    Vector3 edge2 = v2 - v0;
+                    Vector3 faceNormal = Vector3.Cross(edge1, edge2).normalized;
+
+                    // Determine triangle type by average Z position
+                    float avgZ = (v0.z + v1.z + v2.z) / 3f;
+                    bool needsFlip = false;
+
+                    if (Mathf.Abs(avgZ - frontZ) < zTolerance)
+                    {
+                        // Front cap - normal should point +Z
+                        if (faceNormal.z < 0) needsFlip = true;
+                    }
+                    else if (Mathf.Abs(avgZ - backZ) < zTolerance)
+                    {
+                        // Back cap - normal should point -Z
+                        if (faceNormal.z > 0) needsFlip = true;
+                    }
+                    else
+                    {
+                        // Extrusion face - normal should point away from centroid
+                        Vector3 triCenter = (v0 + v1 + v2) / 3f;
+                        Vector3 outwardDir = (triCenter - centroid).normalized;
+                        if (Vector3.Dot(faceNormal, outwardDir) < 0) needsFlip = true;
+                    }
+
+                    // Flip winding order if needed
+                    if (needsFlip)
+                    {
+                        triangles[i + 1] = idx2;
+                        triangles[i + 2] = idx1;
+                    }
+                }
+            }
         }
 
         #region Private Mesh Generation
