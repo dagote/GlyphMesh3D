@@ -212,6 +212,7 @@ namespace LanternPines.GlyphMesh3D.Core
         internal MeshRenderer meshRenderer;
         private string previousText = "";
         private bool pendingMeshRegeneration = false;
+        private Material[] previousMaterials = null;
 
         [MenuItem("GameObject/3D Object/Glyph Text 3D Generator")]
         private static void CreateGlyphText3D()
@@ -327,6 +328,13 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 GenerateMeshForText();
                 previousText = text;
+
+                // Update tracked materials after regeneration
+                if (meshRenderer != null)
+                {
+                    Material[] currentMaterials = meshRenderer.sharedMaterials;
+                    previousMaterials = currentMaterials != null ? (Material[])currentMaterials.Clone() : null;
+                }
             }
             catch (System.Exception ex)
             {
@@ -346,12 +354,52 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void LateUpdate()
         {
+            // Detect material changes and trigger regeneration
+            if (meshRenderer != null)
+            {
+                Material[] currentMaterials = meshRenderer.sharedMaterials;
+                if (HasMaterialsChanged(currentMaterials))
+                {
+                    previousMaterials = currentMaterials != null ? (Material[])currentMaterials.Clone() : null;
+                    pendingMeshRegeneration = true;
+                }
+            }
+
             // Process deferred mesh regeneration (happens after all slot changes are applied)
             if (pendingMeshRegeneration)
             {
                 pendingMeshRegeneration = false;
                 RegenerateMesh();
             }
+        }
+
+        /// <summary>
+        /// Check if the materials array has changed compared to the previous frame.
+        /// </summary>
+        private bool HasMaterialsChanged(Material[] currentMaterials)
+        {
+            // First time check
+            if (previousMaterials == null)
+            {
+                return currentMaterials != null && currentMaterials.Length > 0;
+            }
+
+            // Length changed
+            if (currentMaterials == null || currentMaterials.Length != previousMaterials.Length)
+            {
+                return true;
+            }
+
+            // Check each material reference
+            for (int i = 0; i < currentMaterials.Length; i++)
+            {
+                if (currentMaterials[i] != previousMaterials[i])
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void ClearMesh()
