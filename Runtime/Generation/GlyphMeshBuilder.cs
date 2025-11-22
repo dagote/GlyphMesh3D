@@ -729,39 +729,14 @@ namespace LanternPines.GlyphMesh3D.Generation
 
         /// <summary>
         /// Calculate the V range (0-1) for a band within its assigned quadrant
-        /// Bands sharing the same quadrant subdivide the vertical space equally
+        /// All bands use the full height of their quadrant (typically for solid colors)
         /// </summary>
         private static void GetBandVRange(int bandIndex, int totalBands, out float vMin, out float vMax)
         {
-            if (totalBands == 0)
-            {
-                vMin = 0f;
-                vMax = 1f;
-                return;
-            }
-
-            if (totalBands == 1)
-            {
-                // Single band in q3 uses full height
-                vMin = 0f;
-                vMax = 1f;
-                return;
-            }
-
-            // Last band always goes in q3 with full height
-            if (bandIndex == totalBands - 1)
-            {
-                vMin = 0f;
-                vMax = 1f;
-                return;
-            }
-
-            // All other bands go in q2 and subdivide the space
-            int bandsInQ2 = totalBands - 1; // All except the last one
-            float heightPerBand = 1.0f / bandsInQ2;
-
-            vMin = bandIndex * heightPerBand;
-            vMax = (bandIndex + 1) * heightPerBand;
+            // All bands always use the full quadrant height
+            // Multiple bands in the same quadrant will show the same texture
+            vMin = 0f;
+            vMax = 1f;
         }
 
         /// <summary>
