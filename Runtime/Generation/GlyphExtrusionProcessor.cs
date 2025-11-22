@@ -194,7 +194,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                     targetPos = p + normal * offset;
 
                     // Check if movement path would intersect any edge of the same boundary
-                    float maxOffset = offset;
                     float closestIntersection = 1.0f; // Normalized distance along ray (0=start, 1=target)
 
                     for (int j = 0; j < n; j++)
@@ -215,11 +214,11 @@ namespace LanternPines.GlyphMesh3D.Generation
                         }
                     }
 
-                    // Clamp offset to just before intersection point
+                    // Clamp offset if intersection found
                     if (closestIntersection < 1.0f)
                     {
-                        // Stop slightly before intersection to avoid exact overlap
-                        closestIntersection = Mathf.Max(0, closestIntersection - 0.01f);
+                        // Stop at intersection point (allow 99% of the way)
+                        closestIntersection = Mathf.Max(0, closestIntersection * 0.99f);
                         targetPos = p + normal * (offset * closestIntersection);
                     }
                 }
@@ -228,6 +227,27 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             return offsetPoints;
+        }
+
+        /// <summary>
+        /// Check if a boundary has collapsed or become degenerate
+        /// </summary>
+        public static bool IsBoundaryDegenerate(List<Vector2> boundary)
+        {
+            if (boundary.Count < 3) return true;
+
+            // Calculate area using shoelace formula
+            float area = 0f;
+            for (int i = 0; i < boundary.Count; i++)
+            {
+                int next = (i + 1) % boundary.Count;
+                area += boundary[i].x * boundary[next].y;
+                area -= boundary[next].x * boundary[i].y;
+            }
+            area = Mathf.Abs(area * 0.5f);
+
+            // Consider degenerate if area is very small
+            return area < 0.1f;
         }
 
         /// <summary>
@@ -251,9 +271,10 @@ namespace LanternPines.GlyphMesh3D.Generation
             float rayT = (segDir.x * (rayStart.y - segStart.y) - segDir.y * (rayStart.x - segStart.x)) / denominator;
 
             // Check if intersection is within both ray and segment
-            // For ray: 0 < rayT < 1 (not including start point)
+            // Use smaller threshold to allow more movement at sharp corners
+            // For ray: just slightly past start point to avoid self-intersection
             // For segment: 0 <= s <= 1
-            if (s >= 0 && s <= 1 && rayT > 0.01f && rayT <= 1.0f)
+            if (s >= 0 && s <= 1 && rayT > 0.001f && rayT <= 1.0f)
             {
                 t = rayT;
                 return true;

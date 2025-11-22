@@ -266,12 +266,30 @@ namespace LanternPines.GlyphMesh3D.Generation
                 layerBoundaries.Add(offsetBoundaries);
             }
 
-            // Create triangulations for each layer
+            // Create triangulations for each layer (filter out degenerate boundaries)
             var layerTriangulations = new List<GlyphTriangulator.TriangulationResult>();
             foreach (var layerBounds in layerBoundaries)
             {
-                var layerTri = GlyphTriangulator.Triangulate(layerBounds);
-                layerTriangulations.Add(layerTri);
+                // Filter out collapsed/degenerate boundaries before triangulation
+                var validBounds = new List<List<Vector2>>();
+                foreach (var bound in layerBounds)
+                {
+                    if (!GlyphExtrusionProcessor.IsBoundaryDegenerate(bound))
+                    {
+                        validBounds.Add(bound);
+                    }
+                }
+
+                // Only triangulate if we have at least one valid boundary
+                if (validBounds.Count > 0)
+                {
+                    var layerTri = GlyphTriangulator.Triangulate(validBounds);
+                    layerTriangulations.Add(layerTri);
+                }
+                else
+                {
+                    layerTriangulations.Add(null);
+                }
             }
 
             // Create vertex maps for each layer using offset triangulations
