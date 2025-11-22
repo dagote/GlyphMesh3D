@@ -204,60 +204,6 @@ namespace LanternPines.GlyphMesh3D.Generation
             return normal.magnitude > 0.0001f ? normal.normalized : Vector3.zero;
         }
 
-        /// <summary>
-        /// Add triangle with automatic winding order correction to maintain normal consistency
-        /// </summary>
-        private static void AddTriangleWithConsistentWinding(
-            List<int> triangles,
-            int idx0, int idx1, int idx2,
-            List<Vector3> vertices,
-            VertexNormalTracker tracker,
-            Vector3 expectedNormalDirection)
-        {
-            Vector3 v0 = vertices[idx0];
-            Vector3 v1 = vertices[idx1];
-            Vector3 v2 = vertices[idx2];
-
-            // Calculate face normal with current winding order (v0, v1, v2)
-            Vector3 faceNormal = CalculateFaceNormal(v0, v1, v2);
-            if (faceNormal == Vector3.zero) return; // Degenerate triangle
-
-            // Determine if we need to flip winding
-            bool needsFlip = false;
-
-            // First check: does current winding match expected direction?
-            if (Vector3.Dot(faceNormal, expectedNormalDirection) < 0)
-            {
-                needsFlip = true;
-                faceNormal = -faceNormal;
-            }
-
-            // Second check: is this consistent with existing vertices?
-            if (!tracker.IsTriangleConsistent(v0, v1, v2, faceNormal))
-            {
-                // Need to flip to maintain consistency with existing vertices
-                needsFlip = !needsFlip;
-                faceNormal = -faceNormal;
-            }
-
-            // Add triangle with correct winding order
-            if (needsFlip)
-            {
-                triangles.Add(idx2);
-                triangles.Add(idx1);
-                triangles.Add(idx0);
-            }
-            else
-            {
-                triangles.Add(idx0);
-                triangles.Add(idx1);
-                triangles.Add(idx2);
-            }
-
-            // Track this triangle's vertices and normal
-            tracker.AddTriangle(v0, v1, v2, faceNormal);
-        }
-
         private static void GenerateStraightMesh(List<List<Vector2>> boundaries, MeshBuildSettings settings,
             List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
             Dictionary<Material, List<int>> submeshData)
@@ -283,7 +229,8 @@ namespace LanternPines.GlyphMesh3D.Generation
                 }
             }
 
-            // Front face triangles - normals must point toward +Z (camera direction)
+            // Front face triangles - use triangulation winding as-is (0, 1, 2)
+            // This ensures normals point toward +Z (away from solid volume)
             foreach (var t in triangulation.TriMesh.Triangles)
             {
                 var v0 = t.GetVertex(0);
@@ -296,13 +243,22 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                 if (vertexMap.ContainsKey(id0) && vertexMap.ContainsKey(id1) && vertexMap.ContainsKey(id2))
                 {
-                    // Use consistent winding with +Z normal direction
-                    AddTriangleWithConsistentWinding(triangles, vertexMap[id0], vertexMap[id1], vertexMap[id2],
-                        vertices, tracker, Vector3.forward);
+                    int idx0 = vertexMap[id0];
+                    int idx1 = vertexMap[id1];
+                    int idx2 = vertexMap[id2];
+
+                    // Front cap: use winding as-is (0, 1, 2)
+                    triangles.Add(idx0);
+                    triangles.Add(idx1);
+                    triangles.Add(idx2);
+
+                    // Track for coincident vertex validation
+                    Vector3 faceNormal = CalculateFaceNormal(vertices[idx0], vertices[idx1], vertices[idx2]);
+                    tracker.AddTriangle(vertices[idx0], vertices[idx1], vertices[idx2], faceNormal);
                 }
             }
 
-            // All normals point forward (toward +Z / camera direction)
+            // Calculate normals from face geometry (all point +Z for planar front cap)
             var meshNormals = new Vector3[vertices.Count];
             for (int i = 0; i < vertices.Count; i++)
             {
@@ -404,12 +360,13 @@ namespace LanternPines.GlyphMesh3D.Generation
             var materials = settings.Materials ?? new Material[0];
             Material faceMat = slotMap.FaceSlot < materials.Length ? materials[slotMap.FaceSlot] : null;
 
-            // Front face triangles - normals must point toward +Z (camera direction)
+            // Front and back face triangles
             if (faceMat != null)
             {
                 if (!localSubmeshData.ContainsKey(faceMat))
                     localSubmeshData[faceMat] = new List<int>();
 
+                // Front cap triangles - use winding as-is (0, 1, 2) for +Z normals
                 foreach (var t in triangulation.TriMesh.Triangles)
                 {
                     var v0 = t.GetVertex(0);
@@ -423,13 +380,22 @@ namespace LanternPines.GlyphMesh3D.Generation
                     var frontMap = layerVertexMaps[0];
                     if (frontMap.ContainsKey(id0) && frontMap.ContainsKey(id1) && frontMap.ContainsKey(id2))
                     {
-                        // Use consistent winding with +Z normal direction
-                        AddTriangleWithConsistentWinding(localSubmeshData[faceMat], frontMap[id0], frontMap[id1], frontMap[id2],
-                            vertices, tracker, Vector3.forward);
+                        int idx0 = frontMap[id0];
+                        int idx1 = frontMap[id1];
+                        int idx2 = frontMap[id2];
+
+                        // Front cap: use winding as-is (0, 1, 2)
+                        localSubmeshData[faceMat].Add(idx0);
+                        localSubmeshData[faceMat].Add(idx1);
+                        localSubmeshData[faceMat].Add(idx2);
+
+                        // Track for coincident vertex validation
+                        Vector3 faceNormal = CalculateFaceNormal(vertices[idx0], vertices[idx1], vertices[idx2]);
+                        tracker.AddTriangle(vertices[idx0], vertices[idx1], vertices[idx2], faceNormal);
                     }
                 }
 
-                // Back face triangles - normals must point toward -Z (away from camera)
+                // Back cap triangles - reverse winding (0, 2, 1) for -Z normals
                 foreach (var t in triangulation.TriMesh.Triangles)
                 {
                     var v0 = t.GetVertex(0);
@@ -443,9 +409,18 @@ namespace LanternPines.GlyphMesh3D.Generation
                     var backMap = layerVertexMaps[layerVertexMaps.Count - 1];
                     if (backMap.ContainsKey(id0) && backMap.ContainsKey(id1) && backMap.ContainsKey(id2))
                     {
-                        // Use consistent winding with -Z normal direction
-                        AddTriangleWithConsistentWinding(localSubmeshData[faceMat], backMap[id0], backMap[id1], backMap[id2],
-                            vertices, tracker, Vector3.back);
+                        int idx0 = backMap[id0];
+                        int idx1 = backMap[id1];
+                        int idx2 = backMap[id2];
+
+                        // Back cap: reverse winding (0, 2, 1)
+                        localSubmeshData[faceMat].Add(idx0);
+                        localSubmeshData[faceMat].Add(idx2);  // Swapped!
+                        localSubmeshData[faceMat].Add(idx1);  // Swapped!
+
+                        // Track for coincident vertex validation
+                        Vector3 faceNormal = CalculateFaceNormal(vertices[idx0], vertices[idx2], vertices[idx1]);
+                        tracker.AddTriangle(vertices[idx0], vertices[idx2], vertices[idx1], faceNormal);
                     }
                 }
             }
@@ -550,26 +525,39 @@ namespace LanternPines.GlyphMesh3D.Generation
                             if (!localSubmeshData.ContainsKey(layerMat))
                                 localSubmeshData[layerMat] = new List<int>();
 
+                            // Calculate edge normal pointing outward
+                            Vector3 edgeNormal = GlyphExtrusionProcessor.CalculateEdgeNormal(p0, p1, centroid, isHole);
+
                             if (isHole)
                             {
+                                // Hole winding - normals point into the hole (outward from solid)
                                 localSubmeshData[layerMat].Add(curr0);
                                 localSubmeshData[layerMat].Add(next1);
                                 localSubmeshData[layerMat].Add(curr1);
                                 localSubmeshData[layerMat].Add(curr0);
                                 localSubmeshData[layerMat].Add(next0);
                                 localSubmeshData[layerMat].Add(next1);
+
+                                // Track for validation
+                                tracker.AddTriangle(vertices[curr0], vertices[next1], vertices[curr1], edgeNormal);
+                                tracker.AddTriangle(vertices[curr0], vertices[next0], vertices[next1], edgeNormal);
                             }
                             else
                             {
+                                // Outer boundary winding - normals point away from solid
                                 localSubmeshData[layerMat].Add(curr0);
                                 localSubmeshData[layerMat].Add(curr1);
                                 localSubmeshData[layerMat].Add(next1);
                                 localSubmeshData[layerMat].Add(curr0);
                                 localSubmeshData[layerMat].Add(next1);
                                 localSubmeshData[layerMat].Add(next0);
+
+                                // Track for validation
+                                tracker.AddTriangle(vertices[curr0], vertices[curr1], vertices[next1], edgeNormal);
+                                tracker.AddTriangle(vertices[curr0], vertices[next1], vertices[next0], edgeNormal);
                             }
 
-                            Vector3 edgeNormal = GlyphExtrusionProcessor.CalculateEdgeNormal(p0, p1, centroid, isHole);
+                            // Set vertex normals
                             meshNormals[curr0] = edgeNormal;
                             meshNormals[curr1] = edgeNormal;
                             meshNormals[next0] = edgeNormal;
