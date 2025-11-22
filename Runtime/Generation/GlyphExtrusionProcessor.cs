@@ -61,13 +61,11 @@ namespace LanternPines.GlyphMesh3D.Generation
         public class BoundaryNormalsResult
         {
             public Dictionary<long, Vector2> NormalMap;
-            public Dictionary<long, float> MaxOffsetMap;
             public HashSet<long> HoleVertices;
 
             public BoundaryNormalsResult()
             {
                 NormalMap = new Dictionary<long, Vector2>();
-                MaxOffsetMap = new Dictionary<long, float>();
                 HoleVertices = new HashSet<long>();
             }
         }
@@ -120,13 +118,9 @@ namespace LanternPines.GlyphMesh3D.Generation
                     Vector2 prev = boundary[(i - 1 + n) % n];
                     Vector2 next = boundary[(i + 1) % n];
 
-                    // Calculate edge vectors
-                    Vector2 edge1 = (p - prev);
-                    Vector2 edge2 = (next - p);
-                    float edgeLen1 = edge1.magnitude;
-                    float edgeLen2 = edge2.magnitude;
-                    edge1 = edge1.normalized;
-                    edge2 = edge2.normalized;
+                    // Calculate edge normals
+                    Vector2 edge1 = (p - prev).normalized;
+                    Vector2 edge2 = (next - p).normalized;
 
                     // Perpendicular to edges (rotate 90 degrees)
                     Vector2 normal1 = new Vector2(-edge1.y, edge1.x);
@@ -144,13 +138,8 @@ namespace LanternPines.GlyphMesh3D.Generation
                         avgNormal = -avgNormal;
                     }
 
-                    // Calculate maximum safe offset to prevent self-intersection
-                    // Based on angle between edges and edge lengths
-                    float maxOffset = CalculateMaxSafeOffset(edge1, edge2, edgeLen1, edgeLen2, avgNormal);
-
                     long id = GlyphTriangulator.GetDeterministicVertexId(p.x, p.y);
                     result.NormalMap[id] = avgNormal;
-                    result.MaxOffsetMap[id] = maxOffset;
 
                     // Track hole vertices
                     if (isHole)
@@ -164,38 +153,125 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Calculate the maximum safe offset distance for a vertex to prevent self-intersections
+        /// Create offset boundary with uniform expansion and intersection handling
         /// </summary>
-        private static float CalculateMaxSafeOffset(Vector2 edge1, Vector2 edge2, float edgeLen1, float edgeLen2, Vector2 offsetNormal)
+        public static List<Vector2> CreateOffsetBoundary(List<Vector2> boundary, Dictionary<long, Vector2> normalMap, float offsetDistance, bool isHole)
         {
-            // Calculate the angle between edges
-            float dot = Vector2.Dot(edge1, edge2);
-            float angle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f));
+            int n = boundary.Count;
+            var offsetPoints = new List<Vector2>(n);
 
-            // At sharp angles, the offset normal gets longer relative to perpendicular distance
-            // The actual perpendicular offset is: offset / sin(angle/2)
-            // So max safe offset is: min(edge_length) * sin(angle/2)
-
-            float halfAngle = angle * 0.5f;
-            float sinHalfAngle = Mathf.Sin(halfAngle);
-
-            // Prevent division by very small numbers
-            if (sinHalfAngle < 0.01f)
+            // First pass: offset all vertices uniformly
+            for (int i = 0; i < n; i++)
             {
-                sinHalfAngle = 0.01f;
+                Vector2 p = boundary[i];
+                long id = GlyphTriangulator.GetDeterministicVertexId(p.x, p.y);
+
+                if (normalMap.TryGetValue(id, out Vector2 normal))
+                {
+                    float offset = isHole ? -offsetDistance : offsetDistance;
+                    offsetPoints.Add(p + normal * offset);
+                }
+                else
+                {
+                    offsetPoints.Add(p);
+                }
             }
 
-            // Use the shorter adjacent edge as the limiting factor
-            float minEdgeLen = Mathf.Min(edgeLen1, edgeLen2);
+            // Second pass: detect and handle edge intersections
+            var cleanedPoints = HandleSelfIntersections(offsetPoints);
 
-            // Maximum offset is limited by edge length and angle
-            // Use a safety factor of 0.4 to be conservative
-            float maxOffset = minEdgeLen * sinHalfAngle * 0.4f;
+            return cleanedPoints;
+        }
 
-            // Also limit based on overall edge lengths to prevent extreme offsets
-            maxOffset = Mathf.Min(maxOffset, minEdgeLen * 0.45f);
+        /// <summary>
+        /// Detect and handle self-intersections in an offset boundary
+        /// </summary>
+        private static List<Vector2> HandleSelfIntersections(List<Vector2> points)
+        {
+            if (points.Count < 3) return points;
 
-            return maxOffset;
+            var result = new List<Vector2>();
+            int n = points.Count;
+            bool[] removed = new bool[n];
+
+            // Check each edge against non-adjacent edges for intersections
+            for (int i = 0; i < n; i++)
+            {
+                if (removed[i]) continue;
+
+                Vector2 p0 = points[i];
+                Vector2 p1 = points[(i + 1) % n];
+
+                bool foundIntersection = false;
+
+                // Check against edges that are at least 2 edges away
+                for (int j = i + 2; j < n; j++)
+                {
+                    if (removed[j]) continue;
+                    if (j == (i + n - 1) % n) continue; // Skip adjacent edge
+
+                    Vector2 p2 = points[j];
+                    Vector2 p3 = points[(j + 1) % n];
+
+                    if (LineSegmentsIntersect(p0, p1, p2, p3, out Vector2 intersection))
+                    {
+                        // Found intersection - mark intermediate vertices for removal
+                        result.Add(p0);
+                        result.Add(intersection);
+
+                        // Mark vertices between i+1 and j (inclusive) for removal
+                        for (int k = (i + 1) % n; k != j; k = (k + 1) % n)
+                        {
+                            removed[k] = true;
+                        }
+
+                        // Skip to j
+                        i = j - 1;
+                        foundIntersection = true;
+                        break;
+                    }
+                }
+
+                if (!foundIntersection && !removed[i])
+                {
+                    result.Add(p0);
+                }
+            }
+
+            // If no intersections found, return original
+            if (result.Count == 0)
+                return points;
+
+            return result;
+        }
+
+        /// <summary>
+        /// Check if two line segments intersect and return the intersection point
+        /// </summary>
+        private static bool LineSegmentsIntersect(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, out Vector2 intersection)
+        {
+            intersection = Vector2.zero;
+
+            Vector2 s1 = p1 - p0;
+            Vector2 s2 = p3 - p2;
+
+            float denominator = (-s2.x * s1.y + s1.x * s2.y);
+
+            // Lines are parallel
+            if (Mathf.Abs(denominator) < 1e-6f)
+                return false;
+
+            float s = (-s1.y * (p0.x - p2.x) + s1.x * (p0.y - p2.y)) / denominator;
+            float t = (s2.x * (p0.y - p2.y) - s2.y * (p0.x - p2.x)) / denominator;
+
+            // Check if intersection is within both line segments
+            if (s >= 0 && s <= 1 && t >= 0 && t <= 1)
+            {
+                intersection = p0 + (t * s1);
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
