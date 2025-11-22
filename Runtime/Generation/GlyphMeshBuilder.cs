@@ -419,18 +419,21 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                     float cumulativeDistance = 0f;
 
-                    // Only process if both boundaries have same vertex count
-                    // (intersection handling should preserve topology for adjacent layers)
-                    if (currN == nextN)
-                    {
-                        for (int i = 0; i < currN; i++)
-                        {
-                            Vector2 currP0 = currBoundary[i];
-                            Vector2 currP1 = currBoundary[(i + 1) % currN];
-                            Vector2 nextP0 = nextBoundary[i];
-                            Vector2 nextP1 = nextBoundary[(i + 1) % nextN];
+                    // Handle side faces even if vertex counts differ (due to intersection handling)
+                    // Use the smaller count and match vertices by proximity
+                    int minN = Mathf.Min(currN, nextN);
 
-                            float edgeLength = Vector2.Distance(currP0, currP1);
+                    for (int i = 0; i < minN; i++)
+                    {
+                        Vector2 currP0 = currBoundary[i];
+                        Vector2 currP1 = currBoundary[(i + 1) % currN];
+
+                        // For next layer, handle potential vertex count mismatch
+                        int nextI = (int)((float)i / minN * nextN);
+                        Vector2 nextP0 = nextBoundary[nextI % nextN];
+                        Vector2 nextP1 = nextBoundary[(nextI + 1) % nextN];
+
+                        float edgeLength = Vector2.Distance(currP0, currP1);
 
                         var currSideMap = layerSideVertexMaps[layerIdx];
                         var nextSideMap = layerSideVertexMaps[layerIdx + 1];
@@ -444,66 +447,59 @@ namespace LanternPines.GlyphMesh3D.Generation
                         long triNetId3 = GlyphExtrusionProcessor.FindTriNetIdForPosition(layerVertexMaps[layerIdx + 1], vertices,
                             nextP1 * SCALE_FACTOR, layers[layerIdx + 1].depth * SCALE_FACTOR, SCALE_FACTOR);
 
-                            if (triNetId0 < 0 || triNetId1 < 0 || triNetId2 < 0 || triNetId3 < 0) continue;
+                        if (triNetId0 < 0 || triNetId1 < 0 || triNetId2 < 0 || triNetId3 < 0) continue;
 
-                            int curr0 = currSideMap[triNetId0];
-                            int curr1 = currSideMap[triNetId1];
-                            int next0 = nextSideMap[triNetId2];
-                            int next1 = nextSideMap[triNetId3];
+                        int curr0 = currSideMap[triNetId0];
+                        int curr1 = currSideMap[triNetId1];
+                        int next0 = nextSideMap[triNetId2];
+                        int next1 = nextSideMap[triNetId3];
 
-                            // Generate stepped UVs for this quad (quadrant 2: U: 0.5-1, V: 0.5-1)
-                            float u0 = 0.5f + (cumulativeDistance / totalPerimeter) * 0.5f;
-                            float u1 = 0.5f + ((cumulativeDistance + edgeLength) / totalPerimeter) * 0.5f;
-                            float v0 = 0.5f + (layers[layerIdx].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
-                            float v1 = 0.5f + (layers[layerIdx + 1].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
+                        // Defer UV generation - will be done in final pass
+                        int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
+                        Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
 
-                            meshUVs[curr0] = new Vector2(u0, v0);
-                            meshUVs[curr1] = new Vector2(u1, v0);
-                            meshUVs[next0] = new Vector2(u0, v1);
-                            meshUVs[next1] = new Vector2(u1, v1);
+                        if (layerMat != null)
+                        {
+                            if (!localSubmeshData.ContainsKey(layerMat))
+                                localSubmeshData[layerMat] = new List<int>();
 
-                            int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
-                            Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
-
-                            if (layerMat != null)
+                            if (isHole)
                             {
-                                if (!localSubmeshData.ContainsKey(layerMat))
-                                    localSubmeshData[layerMat] = new List<int>();
-
-                                if (isHole)
-                                {
-                                    localSubmeshData[layerMat].Add(curr0);
-                                    localSubmeshData[layerMat].Add(next1);
-                                    localSubmeshData[layerMat].Add(curr1);
-                                    localSubmeshData[layerMat].Add(curr0);
-                                    localSubmeshData[layerMat].Add(next0);
-                                    localSubmeshData[layerMat].Add(next1);
-                                }
-                                else
-                                {
-                                    localSubmeshData[layerMat].Add(curr0);
-                                    localSubmeshData[layerMat].Add(curr1);
-                                    localSubmeshData[layerMat].Add(next1);
-                                    localSubmeshData[layerMat].Add(curr0);
-                                    localSubmeshData[layerMat].Add(next1);
-                                    localSubmeshData[layerMat].Add(next0);
-                                }
-
-                                Vector3 edgeNormal = GlyphExtrusionProcessor.CalculateEdgeNormal(currP0, currP1, centroid, isHole);
-                                meshNormals[curr0] = edgeNormal;
-                                meshNormals[curr1] = edgeNormal;
-                                meshNormals[next0] = edgeNormal;
-                                meshNormals[next1] = edgeNormal;
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(curr1);
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next0);
+                                localSubmeshData[layerMat].Add(next1);
+                            }
+                            else
+                            {
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(curr1);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(curr0);
+                                localSubmeshData[layerMat].Add(next1);
+                                localSubmeshData[layerMat].Add(next0);
                             }
 
-                            cumulativeDistance += edgeLength;
+                            Vector3 edgeNormal = GlyphExtrusionProcessor.CalculateEdgeNormal(currP0, currP1, centroid, isHole);
+                            meshNormals[curr0] = edgeNormal;
+                            meshNormals[curr1] = edgeNormal;
+                            meshNormals[next0] = edgeNormal;
+                            meshNormals[next1] = edgeNormal;
                         }
+
+                        cumulativeDistance += edgeLength;
                     }
                 }
             }
 
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
+
+            // Final UV unwrapping pass - generates UVs for all side vertices based on final geometry
+            GenerateFinalSideUVs(vertices, layerVertexMaps, layerSideVertexMaps, layerBoundaries, layers, settings, meshUVs);
+
             allUVs.AddRange(meshUVs);
 
             foreach (var kvp in localSubmeshData)
@@ -514,6 +510,70 @@ namespace LanternPines.GlyphMesh3D.Generation
                 for (int i = 0; i < kvp.Value.Count; i++)
                 {
                     submeshData[kvp.Key].Add(kvp.Value[i] + vertexOffset);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Generate final UVs for side vertices in quadrant 2 after all geometry is built
+        /// </summary>
+        private static void GenerateFinalSideUVs(
+            List<Vector3> vertices,
+            List<Dictionary<long, int>> layerVertexMaps,
+            List<Dictionary<long, int>> layerSideVertexMaps,
+            List<List<List<Vector2>>> layerBoundaries,
+            List<GlyphExtrusionProcessor.ExtrusionLayer> layers,
+            MeshBuildSettings settings,
+            List<Vector2> uvs)
+        {
+            if (layerSideVertexMaps.Count == 0 || layerBoundaries.Count == 0) return;
+
+            // For each boundary in the original mesh
+            for (int b = 0; b < layerBoundaries[0].Count; b++)
+            {
+                // Calculate total perimeter across all layers (use first layer as reference)
+                var firstBoundary = layerBoundaries[0][b];
+                float totalPerimeter = 0f;
+                for (int i = 0; i < firstBoundary.Count; i++)
+                {
+                    Vector2 p0 = firstBoundary[i];
+                    Vector2 p1 = firstBoundary[(i + 1) % firstBoundary.Count];
+                    totalPerimeter += Vector2.Distance(p0, p1);
+                }
+
+                if (totalPerimeter < 0.0001f) continue;
+
+                // Process each layer
+                for (int layerIdx = 0; layerIdx < layers.Count; layerIdx++)
+                {
+                    if (layerIdx >= layerBoundaries.Count) continue;
+
+                    var boundary = layerBoundaries[layerIdx][b];
+                    var sideMap = layerSideVertexMaps[layerIdx];
+                    float depth = layers[layerIdx].depth;
+                    float v = 0.5f + (depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
+
+                    float cumulativeDist = 0f;
+
+                    // Assign UVs to each vertex in the boundary
+                    for (int i = 0; i < boundary.Count; i++)
+                    {
+                        Vector2 p = boundary[i];
+                        long id = GlyphTriangulator.GetDeterministicVertexId(p.x, p.y);
+
+                        if (sideMap.TryGetValue(id, out int vertexIdx))
+                        {
+                            float u = 0.5f + (cumulativeDist / totalPerimeter) * 0.5f;
+                            uvs[vertexIdx] = new Vector2(u, v);
+                        }
+
+                        // Accumulate distance for next vertex
+                        if (i < boundary.Count - 1)
+                        {
+                            Vector2 pNext = boundary[(i + 1) % boundary.Count];
+                            cumulativeDist += Vector2.Distance(p, pNext);
+                        }
+                    }
                 }
             }
         }
