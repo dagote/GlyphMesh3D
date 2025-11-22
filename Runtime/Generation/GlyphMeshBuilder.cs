@@ -225,27 +225,40 @@ namespace LanternPines.GlyphMesh3D.Generation
             var boundaryCentroids = boundaries.Select(b => GlyphExtrusionProcessor.CalculateCentroid(b)).ToList();
             var boundaryIsHole = Enumerable.Range(0, boundaries.Count).Select(i => i > 0).ToList();
 
-            // Create offset boundaries for each layer (with intersection handling)
+            // Create offset boundaries for each layer (with incremental intersection handling)
+            // Each layer builds upon the previous layer's resolved boundary
             var layerBoundaries = new List<List<List<Vector2>>>();
-            for (int layerIdx = 0; layerIdx < layers.Count; layerIdx++)
+
+            // Start with original boundaries for layer 0
+            layerBoundaries.Add(boundaries.Select(b => new List<Vector2>(b)).ToList());
+
+            // Build subsequent layers incrementally from previous layer
+            for (int layerIdx = 1; layerIdx < layers.Count; layerIdx++)
             {
-                var layer = layers[layerIdx];
+                var prevLayer = layers[layerIdx - 1];
+                var currLayer = layers[layerIdx];
+                var prevBoundaries = layerBoundaries[layerIdx - 1];
                 var offsetBoundaries = new List<List<Vector2>>();
 
-                for (int b = 0; b < boundaries.Count; b++)
+                // Calculate incremental offset from previous layer
+                float incrementalOffset = currLayer.curveOffset - prevLayer.curveOffset;
+
+                for (int b = 0; b < prevBoundaries.Count; b++)
                 {
-                    var boundary = boundaries[b];
+                    var prevBoundary = prevBoundaries[b];
                     bool isHole = b > 0;
 
-                    if (Mathf.Approximately(layer.curveOffset, 0f))
+                    if (Mathf.Approximately(incrementalOffset, 0f))
                     {
-                        // No offset needed
-                        offsetBoundaries.Add(new List<Vector2>(boundary));
+                        // No additional offset needed
+                        offsetBoundaries.Add(new List<Vector2>(prevBoundary));
                     }
                     else
                     {
-                        // Create offset boundary with intersection handling
-                        var offsetBoundary = GlyphExtrusionProcessor.CreateOffsetBoundary(boundary, normalsResult.NormalMap, layer.curveOffset, isHole);
+                        // Offset from previous layer's boundary (which may have intersections resolved)
+                        // Recalculate normals for the current boundary shape
+                        var currentNormals = GlyphExtrusionProcessor.CalculateBoundaryNormals(new List<List<Vector2>> { prevBoundary });
+                        var offsetBoundary = GlyphExtrusionProcessor.CreateOffsetBoundary(prevBoundary, currentNormals.NormalMap, incrementalOffset, isHole);
                         offsetBoundaries.Add(offsetBoundary);
                     }
                 }
