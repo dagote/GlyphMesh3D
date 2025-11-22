@@ -673,8 +673,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
             Material defaultMat = null;
 
-#if UNITY_EDITOR
-            // Check for URP/HDRP
+            // Check for URP/HDRP once for both editor and runtime
             var renderPipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
             bool isURP = false;
 
@@ -684,6 +683,7 @@ namespace LanternPines.GlyphMesh3D.Core
                 isURP = pipelineName.Contains("Universal");
             }
 
+#if UNITY_EDITOR
             // Load package material based on pipeline
             string materialPath = isURP
                 ? "Packages/com.lanternpines.glyphmesh3d/Runtime/Materials/GlyphTextMaterial_URP.mat"
@@ -707,7 +707,6 @@ namespace LanternPines.GlyphMesh3D.Core
             // Ultimate fallback: create material from shader if package materials not found
             if (defaultMat == null)
             {
-                var renderPipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
                 if (renderPipelineAsset != null)
                 {
                     string pipelineName = renderPipelineAsset.GetType().Name;
