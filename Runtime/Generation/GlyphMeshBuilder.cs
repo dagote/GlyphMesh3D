@@ -145,14 +145,10 @@ namespace LanternPines.GlyphMesh3D.Generation
 
         /// <summary>
         /// Corrects triangle winding orders to ensure consistent outward-facing normals
+        /// Only applies to front and back caps - extrusion faces are already correctly oriented
         /// </summary>
         private static void CorrectTriangleWindingOrders(List<Vector3> vertices, Dictionary<Material, List<int>> submeshData, float extrusionDepth)
         {
-            // Calculate mesh centroid for extrusion normal checks
-            Vector3 centroid = Vector3.zero;
-            foreach (var v in vertices) centroid += v;
-            centroid /= vertices.Count;
-
             float frontZ = 0f;
             float backZ = extrusionDepth * SCALE_FACTOR;
             float zTolerance = 0.001f;
@@ -171,12 +167,22 @@ namespace LanternPines.GlyphMesh3D.Generation
                     Vector3 v1 = vertices[idx1];
                     Vector3 v2 = vertices[idx2];
 
+                    // Check if all vertices are at the same Z level (cap face)
+                    float minZ = Mathf.Min(v0.z, Mathf.Min(v1.z, v2.z));
+                    float maxZ = Mathf.Max(v0.z, Mathf.Max(v1.z, v2.z));
+                    float zRange = maxZ - minZ;
+
+                    // Skip extrusion faces (vertices at different Z levels)
+                    // Only correct winding for front/back caps (all vertices at same Z)
+                    if (zRange > zTolerance)
+                        continue;
+
                     // Calculate face normal
                     Vector3 edge1 = v1 - v0;
                     Vector3 edge2 = v2 - v0;
                     Vector3 faceNormal = Vector3.Cross(edge1, edge2).normalized;
 
-                    // Determine triangle type by average Z position
+                    // Determine triangle type by Z position
                     float avgZ = (v0.z + v1.z + v2.z) / 3f;
                     bool needsFlip = false;
 
@@ -190,13 +196,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Back cap - normal should point +Z (outward from solid)
                         if (faceNormal.z < 0) needsFlip = true;
                     }
-                    else
-                    {
-                        // Extrusion face - normal should point away from centroid
-                        Vector3 triCenter = (v0 + v1 + v2) / 3f;
-                        Vector3 outwardDir = (triCenter - centroid).normalized;
-                        if (Vector3.Dot(faceNormal, outwardDir) < 0) needsFlip = true;
-                    }
+                    // Note: Extrusion faces are skipped above and not corrected
 
                     // Flip winding order if needed
                     if (needsFlip)
