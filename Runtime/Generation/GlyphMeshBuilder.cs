@@ -604,10 +604,14 @@ namespace LanternPines.GlyphMesh3D.Generation
                         int bandQuadrant = GetBandQuadrant(layerIdx, totalBands);
 
                         // Generate normalized UVs (0-1) for this quad
+                        // U wraps around the perimeter
                         float u0_norm = cumulativeDistance / totalPerimeter;
                         float u1_norm = (cumulativeDistance + edgeLength) / totalPerimeter;
-                        float v0_norm = layers[layerIdx].depth / settings.ExtrusionProfile.extrusionDepth;
-                        float v1_norm = layers[layerIdx + 1].depth / settings.ExtrusionProfile.extrusionDepth;
+
+                        // V always uses full quadrant height (0-1) regardless of keyframe position
+                        // This keeps UVs "hard set" to quadrant - texture stretches with geometry
+                        float v0_norm = 0.0f;
+                        float v1_norm = 1.0f;
 
                         // Map to appropriate quadrant
                         meshUVs[curr0] = MapToQuadrant(u0_norm, v0_norm, bandQuadrant);
