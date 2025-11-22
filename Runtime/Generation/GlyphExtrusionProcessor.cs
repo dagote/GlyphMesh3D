@@ -173,140 +173,89 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Create offset boundary with uniform expansion and intersection handling
+        /// Create offset boundary with constrained expansion (vertices stop at self-intersections)
         /// </summary>
         public static List<Vector2> CreateOffsetBoundary(List<Vector2> boundary, Dictionary<long, Vector2> normalMap, float offsetDistance, bool isHole)
         {
             int n = boundary.Count;
             var offsetPoints = new List<Vector2>(n);
 
-            // First pass: offset all vertices uniformly
+            // For each vertex, offset with collision detection
             for (int i = 0; i < n; i++)
             {
                 Vector2 p = boundary[i];
                 long id = GlyphTriangulator.GetDeterministicVertexId(p.x, p.y);
 
+                Vector2 targetPos = p;
+
                 if (normalMap.TryGetValue(id, out Vector2 normal))
                 {
                     float offset = isHole ? -offsetDistance : offsetDistance;
-                    offsetPoints.Add(p + normal * offset);
-                }
-                else
-                {
-                    offsetPoints.Add(p);
-                }
-            }
+                    targetPos = p + normal * offset;
 
-            // Second pass: detect and handle edge intersections
-            var cleanedPoints = HandleSelfIntersections(offsetPoints);
+                    // Check if movement path would intersect any edge of the same boundary
+                    float maxOffset = offset;
+                    float closestIntersection = 1.0f; // Normalized distance along ray (0=start, 1=target)
 
-            return cleanedPoints;
-        }
-
-        /// <summary>
-        /// Detect and handle self-intersections in an offset boundary
-        /// Returns simplified boundary with all intersections resolved
-        /// </summary>
-        private static List<Vector2> HandleSelfIntersections(List<Vector2> points)
-        {
-            if (points.Count < 3) return points;
-
-            // Iteratively handle intersections until none remain
-            var current = new List<Vector2>(points);
-            int maxIterations = 10; // Prevent infinite loops
-            int iteration = 0;
-
-            while (iteration < maxIterations)
-            {
-                var simplified = HandleSingleIntersectionPass(current);
-
-                // If no change, we're done
-                if (simplified.Count == current.Count)
-                    break;
-
-                current = simplified;
-                iteration++;
-            }
-
-            return current;
-        }
-
-        /// <summary>
-        /// Performs a single pass of intersection detection and resolution
-        /// </summary>
-        private static List<Vector2> HandleSingleIntersectionPass(List<Vector2> points)
-        {
-            if (points.Count < 3) return points;
-
-            int n = points.Count;
-
-            // Check all edge pairs for intersections
-            for (int i = 0; i < n; i++)
-            {
-                Vector2 p0 = points[i];
-                Vector2 p1 = points[(i + 1) % n];
-
-                // Check against non-adjacent edges
-                for (int j = i + 2; j < n; j++)
-                {
-                    // Skip if this would be the closing edge
-                    if (j == n - 1 && i == 0) continue;
-
-                    Vector2 p2 = points[j];
-                    Vector2 p3 = points[(j + 1) % n];
-
-                    if (LineSegmentsIntersect(p0, p1, p2, p3, out Vector2 intersection))
+                    for (int j = 0; j < n; j++)
                     {
-                        // Found intersection - create simplified boundary
-                        var result = new List<Vector2>();
+                        // Skip edges adjacent to current vertex
+                        if (j == i || j == (i - 1 + n) % n) continue;
 
-                        // Add vertices before intersection
-                        for (int k = 0; k <= i; k++)
+                        Vector2 edgeStart = boundary[j];
+                        Vector2 edgeEnd = boundary[(j + 1) % n];
+
+                        // Check if ray from p to targetPos intersects edge
+                        if (RayIntersectsSegment(p, targetPos, edgeStart, edgeEnd, out float t))
                         {
-                            result.Add(points[k]);
+                            if (t < closestIntersection)
+                            {
+                                closestIntersection = t;
+                            }
                         }
+                    }
 
-                        // Add intersection point
-                        result.Add(intersection);
-
-                        // Add vertices after intersection (skip removed loop)
-                        for (int k = j + 1; k < n; k++)
-                        {
-                            result.Add(points[k]);
-                        }
-
-                        return result;
+                    // Clamp offset to just before intersection point
+                    if (closestIntersection < 1.0f)
+                    {
+                        // Stop slightly before intersection to avoid exact overlap
+                        closestIntersection = Mathf.Max(0, closestIntersection - 0.01f);
+                        targetPos = p + normal * (offset * closestIntersection);
                     }
                 }
+
+                offsetPoints.Add(targetPos);
             }
 
-            // No intersections found
-            return points;
+            return offsetPoints;
         }
 
         /// <summary>
-        /// Check if two line segments intersect and return the intersection point
+        /// Check if a ray from rayStart to rayEnd intersects a line segment
+        /// Returns true if intersection found, and t (0-1) representing position along ray
         /// </summary>
-        private static bool LineSegmentsIntersect(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, out Vector2 intersection)
+        private static bool RayIntersectsSegment(Vector2 rayStart, Vector2 rayEnd, Vector2 segStart, Vector2 segEnd, out float t)
         {
-            intersection = Vector2.zero;
+            t = 1.0f;
 
-            Vector2 s1 = p1 - p0;
-            Vector2 s2 = p3 - p2;
+            Vector2 rayDir = rayEnd - rayStart;
+            Vector2 segDir = segEnd - segStart;
 
-            float denominator = (-s2.x * s1.y + s1.x * s2.y);
+            float denominator = (-segDir.x * rayDir.y + rayDir.x * segDir.y);
 
             // Lines are parallel
             if (Mathf.Abs(denominator) < 1e-6f)
                 return false;
 
-            float s = (-s1.y * (p0.x - p2.x) + s1.x * (p0.y - p2.y)) / denominator;
-            float t = (s2.x * (p0.y - p2.y) - s2.y * (p0.x - p2.x)) / denominator;
+            float s = (-rayDir.y * (rayStart.x - segStart.x) + rayDir.x * (rayStart.y - segStart.y)) / denominator;
+            float rayT = (segDir.x * (rayStart.y - segStart.y) - segDir.y * (rayStart.x - segStart.x)) / denominator;
 
-            // Check if intersection is within both line segments
-            if (s >= 0 && s <= 1 && t >= 0 && t <= 1)
+            // Check if intersection is within both ray and segment
+            // For ray: 0 < rayT < 1 (not including start point)
+            // For segment: 0 <= s <= 1
+            if (s >= 0 && s <= 1 && rayT > 0.01f && rayT <= 1.0f)
             {
-                intersection = p0 + (t * s1);
+                t = rayT;
                 return true;
             }
 
