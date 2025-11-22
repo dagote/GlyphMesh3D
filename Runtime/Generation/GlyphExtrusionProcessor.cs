@@ -112,13 +112,16 @@ namespace LanternPines.GlyphMesh3D.Generation
                 int n = boundary.Count;
                 bool isHole = b > 0;
 
+                // Calculate centroid for outward direction validation
+                Vector2 centroid = CalculateCentroid(boundary);
+
                 for (int i = 0; i < n; i++)
                 {
                     Vector2 p = boundary[i];
                     Vector2 prev = boundary[(i - 1 + n) % n];
                     Vector2 next = boundary[(i + 1) % n];
 
-                    // Calculate edge normals
+                    // Calculate edge vectors
                     Vector2 edge1 = (p - prev).normalized;
                     Vector2 edge2 = (next - p).normalized;
 
@@ -127,14 +130,31 @@ namespace LanternPines.GlyphMesh3D.Generation
                     Vector2 normal2 = new Vector2(-edge2.y, edge2.x);
 
                     // Average the normals
-                    Vector2 avgNormal = (normal1 + normal2).normalized;
+                    Vector2 avgNormal = (normal1 + normal2);
 
-                    // For outer boundaries (CCW), perpendicular points inward, so flip to point outward
-                    // For holes (CW), perpendicular already points outward (into hole)
-                    float signedArea = GetSignedArea(boundary);
-                    if (signedArea > 0) // Counter-clockwise (outer boundary)
+                    // Normalize if non-zero
+                    if (avgNormal.magnitude > 0.0001f)
                     {
-                        // Flip to make normal point outward
+                        avgNormal = avgNormal.normalized;
+                    }
+                    else
+                    {
+                        // Edges are opposite directions (sharp corner) - use perpendicular to first edge
+                        avgNormal = normal1;
+                    }
+
+                    // Ensure normal points outward from centroid
+                    Vector2 toCenter = centroid - p;
+                    float dotProduct = Vector2.Dot(avgNormal, toCenter);
+
+                    // For outer boundaries, normal should point away from center (dot < 0)
+                    // For holes, normal should point toward center (dot > 0)
+                    if (!isHole && dotProduct > 0)
+                    {
+                        avgNormal = -avgNormal;
+                    }
+                    else if (isHole && dotProduct < 0)
+                    {
                         avgNormal = -avgNormal;
                     }
 
@@ -185,64 +205,83 @@ namespace LanternPines.GlyphMesh3D.Generation
 
         /// <summary>
         /// Detect and handle self-intersections in an offset boundary
+        /// Returns simplified boundary with all intersections resolved
         /// </summary>
         private static List<Vector2> HandleSelfIntersections(List<Vector2> points)
         {
             if (points.Count < 3) return points;
 
-            var result = new List<Vector2>();
-            int n = points.Count;
-            bool[] removed = new bool[n];
+            // Iteratively handle intersections until none remain
+            var current = new List<Vector2>(points);
+            int maxIterations = 10; // Prevent infinite loops
+            int iteration = 0;
 
-            // Check each edge against non-adjacent edges for intersections
+            while (iteration < maxIterations)
+            {
+                var simplified = HandleSingleIntersectionPass(current);
+
+                // If no change, we're done
+                if (simplified.Count == current.Count)
+                    break;
+
+                current = simplified;
+                iteration++;
+            }
+
+            return current;
+        }
+
+        /// <summary>
+        /// Performs a single pass of intersection detection and resolution
+        /// </summary>
+        private static List<Vector2> HandleSingleIntersectionPass(List<Vector2> points)
+        {
+            if (points.Count < 3) return points;
+
+            int n = points.Count;
+
+            // Check all edge pairs for intersections
             for (int i = 0; i < n; i++)
             {
-                if (removed[i]) continue;
-
                 Vector2 p0 = points[i];
                 Vector2 p1 = points[(i + 1) % n];
 
-                bool foundIntersection = false;
-
-                // Check against edges that are at least 2 edges away
+                // Check against non-adjacent edges
                 for (int j = i + 2; j < n; j++)
                 {
-                    if (removed[j]) continue;
-                    if (j == (i + n - 1) % n) continue; // Skip adjacent edge
+                    // Skip if this would be the closing edge
+                    if (j == n - 1 && i == 0) continue;
 
                     Vector2 p2 = points[j];
                     Vector2 p3 = points[(j + 1) % n];
 
                     if (LineSegmentsIntersect(p0, p1, p2, p3, out Vector2 intersection))
                     {
-                        // Found intersection - mark intermediate vertices for removal
-                        result.Add(p0);
-                        result.Add(intersection);
+                        // Found intersection - create simplified boundary
+                        var result = new List<Vector2>();
 
-                        // Mark vertices between i+1 and j (inclusive) for removal
-                        for (int k = (i + 1) % n; k != j; k = (k + 1) % n)
+                        // Add vertices before intersection
+                        for (int k = 0; k <= i; k++)
                         {
-                            removed[k] = true;
+                            result.Add(points[k]);
                         }
 
-                        // Skip to j
-                        i = j - 1;
-                        foundIntersection = true;
-                        break;
-                    }
-                }
+                        // Add intersection point
+                        result.Add(intersection);
 
-                if (!foundIntersection && !removed[i])
-                {
-                    result.Add(p0);
+                        // Add vertices after intersection (skip removed loop)
+                        for (int k = j + 1; k < n; k++)
+                        {
+                            result.Add(points[k]);
+                        }
+
+                        return result;
+                    }
                 }
             }
 
-            // If no intersections found, return original
-            if (result.Count == 0)
-                return points;
-
-            return result;
+            // No intersections found
+            return points;
         }
 
         /// <summary>
