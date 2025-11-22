@@ -225,18 +225,6 @@ namespace LanternPines.GlyphMesh3D.Generation
             var boundaryCentroids = boundaries.Select(b => GlyphExtrusionProcessor.CalculateCentroid(b)).ToList();
             var boundaryIsHole = Enumerable.Range(0, boundaries.Count).Select(i => i > 0).ToList();
 
-            // Calculate total perimeter for UV unwrapping
-            float totalPerimeter = 0f;
-            foreach (var boundary in boundaries)
-            {
-                for (int i = 0; i < boundary.Count; i++)
-                {
-                    Vector2 p0 = boundary[i];
-                    Vector2 p1 = boundary[(i + 1) % boundary.Count];
-                    totalPerimeter += Vector2.Distance(p0, p1);
-                }
-            }
-
             // Create vertex maps for each layer
             var layerVertexMaps = new List<Dictionary<long, int>>();
             for (int layerIdx = 0; layerIdx < layers.Count; layerIdx++)
@@ -347,11 +335,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                     meshNormals[i] = Vector3.zero;
             }
 
-            // Track UV coordinates for side vertices (stepped unwrap)
-            var sideVertexUVs = new Dictionary<int, Vector2>();
-            float accumulatedDistance = 0f;
+            // Initialize UVs for all vertices
+            var meshUVs = new List<Vector2>(new Vector2[vertices.Count]);
 
-            // Side faces
+            // Generate face UVs for layer vertices (quadrant 1)
+            GenerateFaceUVsQuadrant1(vertices, layerVertexMaps, meshUVs);
+
+            // Side faces with stepped UV unwrapping
             for (int b = 0; b < boundaries.Count; b++)
             {
                 var boundary = boundaries[b];
@@ -359,15 +349,22 @@ namespace LanternPines.GlyphMesh3D.Generation
                 bool isHole = boundaryIsHole[b];
                 Vector2 centroid = boundaryCentroids[b];
 
+                // Calculate perimeter for UV unwrapping
+                float totalPerimeter = 0f;
                 for (int i = 0; i < n; i++)
                 {
                     Vector2 p0 = boundary[i];
                     Vector2 p1 = boundary[(i + 1) % n];
+                    totalPerimeter += Vector2.Distance(p0, p1);
+                }
 
-                    // Calculate edge length for UV unwrapping
+                float cumulativeDistance = 0f;
+
+                for (int i = 0; i < n; i++)
+                {
+                    Vector2 p0 = boundary[i];
+                    Vector2 p1 = boundary[(i + 1) % n];
                     float edgeLength = Vector2.Distance(p0, p1);
-                    float segmentStartU = accumulatedDistance / totalPerimeter;
-                    float segmentEndU = (accumulatedDistance + edgeLength) / totalPerimeter;
 
                     for (int layerIdx = 0; layerIdx < layers.Count - 1; layerIdx++)
                     {
@@ -403,16 +400,16 @@ namespace LanternPines.GlyphMesh3D.Generation
                         int next0 = nextSideMap[triNetId0];
                         int next1 = nextSideMap[triNetId1];
 
-                        // Calculate UV coordinates for stepped unwrap
-                        float totalDepth = settings.ExtrusionProfile.extrusionDepth;
-                        float currV = layers[layerIdx].depth / totalDepth;
-                        float nextV = layers[layerIdx + 1].depth / totalDepth;
+                        // Generate stepped UVs for this quad (quadrant 2: U: 0.5-1, V: 0.5-1)
+                        float u0 = 0.5f + (cumulativeDistance / totalPerimeter) * 0.5f;
+                        float u1 = 0.5f + ((cumulativeDistance + edgeLength) / totalPerimeter) * 0.5f;
+                        float v0 = 0.5f + (layers[layerIdx].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
+                        float v1 = 0.5f + (layers[layerIdx + 1].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
 
-                        // Map to quadrant 2 (top-right: U: 0.5-1, V: 0.5-1)
-                        sideVertexUVs[curr0] = new Vector2(0.5f + segmentStartU * 0.5f, 0.5f + currV * 0.5f);
-                        sideVertexUVs[curr1] = new Vector2(0.5f + segmentEndU * 0.5f, 0.5f + currV * 0.5f);
-                        sideVertexUVs[next0] = new Vector2(0.5f + segmentStartU * 0.5f, 0.5f + nextV * 0.5f);
-                        sideVertexUVs[next1] = new Vector2(0.5f + segmentEndU * 0.5f, 0.5f + nextV * 0.5f);
+                        meshUVs[curr0] = new Vector2(u0, v0);
+                        meshUVs[curr1] = new Vector2(u1, v0);
+                        meshUVs[next0] = new Vector2(u0, v1);
+                        meshUVs[next1] = new Vector2(u1, v1);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
@@ -449,15 +446,9 @@ namespace LanternPines.GlyphMesh3D.Generation
                         }
                     }
 
-                    // Accumulate distance for next segment
-                    accumulatedDistance += edgeLength;
+                    cumulativeDistance += edgeLength;
                 }
             }
-
-            // Generate UVs with quadrant mapping (2x2 layout in 0-1 UV space)
-            // Face vertices (front/back) → Quadrant 1 (top-left: UV: 0-0.5, 0.5-1)
-            // Side vertices (extrusions) → Quadrant 2 (top-right: UV: 0.5-1, 0.5-1) with stepped unwrap
-            var meshUVs = GenerateQuadrantMappedUVs(vertices, firstSideVertexIndex, sideVertexUVs);
 
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
@@ -472,6 +463,49 @@ namespace LanternPines.GlyphMesh3D.Generation
                 {
                     submeshData[kvp.Key].Add(kvp.Value[i] + vertexOffset);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Generate UVs for face vertices (front/back layers) in quadrant 1
+        /// </summary>
+        private static void GenerateFaceUVsQuadrant1(List<Vector3> vertices, List<Dictionary<long, int>> layerVertexMaps, List<Vector2> uvs)
+        {
+            if (layerVertexMaps.Count == 0) return;
+
+            // Calculate bounds for all layer vertices
+            var allLayerIndices = new List<int>();
+            foreach (var layer in layerVertexMaps)
+            {
+                allLayerIndices.AddRange(layer.Values);
+            }
+
+            if (allLayerIndices.Count == 0) return;
+
+            Vector3 min = vertices[allLayerIndices[0]];
+            Vector3 max = vertices[allLayerIndices[0]];
+
+            foreach (int idx in allLayerIndices)
+            {
+                min.x = Mathf.Min(min.x, vertices[idx].x);
+                min.y = Mathf.Min(min.y, vertices[idx].y);
+                max.x = Mathf.Max(max.x, vertices[idx].x);
+                max.y = Mathf.Max(max.y, vertices[idx].y);
+            }
+
+            float width = max.x - min.x;
+            float height = max.y - min.y;
+
+            if (width < 0.0001f) width = 1f;
+            if (height < 0.0001f) height = 1f;
+
+            // Map all layer vertices to quadrant 1 (top-left: U: 0-0.5, V: 0.5-1)
+            foreach (int idx in allLayerIndices)
+            {
+                float normalizedX = (vertices[idx].x - min.x) / width;
+                float normalizedY = (vertices[idx].y - min.y) / height;
+                // Map to top-left quadrant
+                uvs[idx] = new Vector2(normalizedX * 0.5f, 0.5f + normalizedY * 0.5f);
             }
         }
 
@@ -505,68 +539,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                 float normalizedX = (v.x - min.x) / width;
                 float normalizedY = (v.y - min.y) / height;
                 uvs.Add(new Vector2(normalizedX, normalizedY));
-            }
-
-            return uvs;
-        }
-
-        /// <summary>
-        /// Generate UVs with quadrant mapping (2x2 layout within 0-1 UV space):
-        /// - Face vertices (front/back) → Quadrant 1 (top-left): UV: 0-0.5, 0.5-1
-        /// - Side vertices (extrusions) → Quadrant 2 (top-right): UV: 0.5-1, 0.5-1 with stepped unwrap
-        /// </summary>
-        private static List<Vector2> GenerateQuadrantMappedUVs(List<Vector3> vertices, int firstSideVertexIndex, Dictionary<int, Vector2> sideVertexUVs)
-        {
-            var uvs = new List<Vector2>(new Vector2[vertices.Count]);
-
-            if (vertices.Count == 0)
-                return uvs;
-
-            // Calculate bounds for face vertices (quadrant 1: top-left)
-            if (firstSideVertexIndex > 0)
-            {
-                Vector3 faceMin = vertices[0];
-                Vector3 faceMax = vertices[0];
-
-                for (int i = 0; i < firstSideVertexIndex; i++)
-                {
-                    faceMin.x = Mathf.Min(faceMin.x, vertices[i].x);
-                    faceMin.y = Mathf.Min(faceMin.y, vertices[i].y);
-                    faceMax.x = Mathf.Max(faceMax.x, vertices[i].x);
-                    faceMax.y = Mathf.Max(faceMax.y, vertices[i].y);
-                }
-
-                float faceWidth = faceMax.x - faceMin.x;
-                float faceHeight = faceMax.y - faceMin.y;
-
-                if (faceWidth < 0.0001f) faceWidth = 1f;
-                if (faceHeight < 0.0001f) faceHeight = 1f;
-
-                // Map face vertices to quadrant 1 (top-left: U: 0-0.5, V: 0.5-1)
-                for (int i = 0; i < firstSideVertexIndex; i++)
-                {
-                    float normalizedX = (vertices[i].x - faceMin.x) / faceWidth;
-                    float normalizedY = (vertices[i].y - faceMin.y) / faceHeight;
-                    // Map to top-left quadrant
-                    uvs[i] = new Vector2(normalizedX * 0.5f, 0.5f + normalizedY * 0.5f);
-                }
-            }
-
-            // Use stepped unwrap UVs for side vertices (quadrant 2: top-right)
-            if (firstSideVertexIndex < vertices.Count)
-            {
-                for (int i = firstSideVertexIndex; i < vertices.Count; i++)
-                {
-                    if (sideVertexUVs.TryGetValue(i, out Vector2 uv))
-                    {
-                        uvs[i] = uv;
-                    }
-                    else
-                    {
-                        // Fallback to center of quadrant 2 if UV not found
-                        uvs[i] = new Vector2(0.75f, 0.75f);
-                    }
-                }
             }
 
             return uvs;
