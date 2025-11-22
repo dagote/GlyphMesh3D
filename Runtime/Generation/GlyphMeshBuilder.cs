@@ -239,12 +239,21 @@ namespace LanternPines.GlyphMesh3D.Generation
                     {
                         Vector2 basePos = new Vector2((float)v.X, (float)v.Y);
 
-                        // Apply perpendicular offset
+                        // Apply perpendicular offset with safety clamping
                         Vector2 offsetPos = basePos;
                         if (normalsResult.NormalMap.TryGetValue(id, out Vector2 normal))
                         {
-                            float offset = normalsResult.HoleVertices.Contains(id) ? -layer.curveOffset : layer.curveOffset;
-                            offsetPos = basePos + normal * offset;
+                            float requestedOffset = normalsResult.HoleVertices.Contains(id) ? -layer.curveOffset : layer.curveOffset;
+
+                            // Clamp offset to maximum safe value to prevent self-intersections
+                            if (normalsResult.MaxOffsetMap.TryGetValue(id, out float maxOffset))
+                            {
+                                float absRequested = Mathf.Abs(requestedOffset);
+                                float clampedAbs = Mathf.Min(absRequested, maxOffset);
+                                requestedOffset = requestedOffset < 0 ? -clampedAbs : clampedAbs;
+                            }
+
+                            offsetPos = basePos + normal * requestedOffset;
                         }
 
                         vertexMap[id] = vertices.Count;
@@ -380,11 +389,29 @@ namespace LanternPines.GlyphMesh3D.Generation
                         if (normalsResult.NormalMap.TryGetValue(baseId0, out Vector2 normal0))
                         {
                             float offset0 = normalsResult.HoleVertices.Contains(baseId0) ? -layers[layerIdx].curveOffset : layers[layerIdx].curveOffset;
+
+                            // Clamp to safe maximum
+                            if (normalsResult.MaxOffsetMap.TryGetValue(baseId0, out float maxOffset0))
+                            {
+                                float absRequested = Mathf.Abs(offset0);
+                                float clampedAbs = Mathf.Min(absRequested, maxOffset0);
+                                offset0 = offset0 < 0 ? -clampedAbs : clampedAbs;
+                            }
+
                             offsetP0 = p0 + normal0 * offset0;
                         }
                         if (normalsResult.NormalMap.TryGetValue(baseId1, out Vector2 normal1))
                         {
                             float offset1 = normalsResult.HoleVertices.Contains(baseId1) ? -layers[layerIdx].curveOffset : layers[layerIdx].curveOffset;
+
+                            // Clamp to safe maximum
+                            if (normalsResult.MaxOffsetMap.TryGetValue(baseId1, out float maxOffset1))
+                            {
+                                float absRequested = Mathf.Abs(offset1);
+                                float clampedAbs = Mathf.Min(absRequested, maxOffset1);
+                                offset1 = offset1 < 0 ? -clampedAbs : clampedAbs;
+                            }
+
                             offsetP1 = p1 + normal1 * offset1;
                         }
 

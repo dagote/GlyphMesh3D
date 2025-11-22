@@ -61,11 +61,13 @@ namespace LanternPines.GlyphMesh3D.Generation
         public class BoundaryNormalsResult
         {
             public Dictionary<long, Vector2> NormalMap;
+            public Dictionary<long, float> MaxOffsetMap;
             public HashSet<long> HoleVertices;
 
             public BoundaryNormalsResult()
             {
                 NormalMap = new Dictionary<long, Vector2>();
+                MaxOffsetMap = new Dictionary<long, float>();
                 HoleVertices = new HashSet<long>();
             }
         }
@@ -118,9 +120,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                     Vector2 prev = boundary[(i - 1 + n) % n];
                     Vector2 next = boundary[(i + 1) % n];
 
-                    // Calculate edge normals
-                    Vector2 edge1 = (p - prev).normalized;
-                    Vector2 edge2 = (next - p).normalized;
+                    // Calculate edge vectors
+                    Vector2 edge1 = (p - prev);
+                    Vector2 edge2 = (next - p);
+                    float edgeLen1 = edge1.magnitude;
+                    float edgeLen2 = edge2.magnitude;
+                    edge1 = edge1.normalized;
+                    edge2 = edge2.normalized;
 
                     // Perpendicular to edges (rotate 90 degrees)
                     Vector2 normal1 = new Vector2(-edge1.y, edge1.x);
@@ -138,8 +144,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                         avgNormal = -avgNormal;
                     }
 
+                    // Calculate maximum safe offset to prevent self-intersection
+                    // Based on angle between edges and edge lengths
+                    float maxOffset = CalculateMaxSafeOffset(edge1, edge2, edgeLen1, edgeLen2, avgNormal);
+
                     long id = GlyphTriangulator.GetDeterministicVertexId(p.x, p.y);
                     result.NormalMap[id] = avgNormal;
+                    result.MaxOffsetMap[id] = maxOffset;
 
                     // Track hole vertices
                     if (isHole)
@@ -150,6 +161,41 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Calculate the maximum safe offset distance for a vertex to prevent self-intersections
+        /// </summary>
+        private static float CalculateMaxSafeOffset(Vector2 edge1, Vector2 edge2, float edgeLen1, float edgeLen2, Vector2 offsetNormal)
+        {
+            // Calculate the angle between edges
+            float dot = Vector2.Dot(edge1, edge2);
+            float angle = Mathf.Acos(Mathf.Clamp(dot, -1f, 1f));
+
+            // At sharp angles, the offset normal gets longer relative to perpendicular distance
+            // The actual perpendicular offset is: offset / sin(angle/2)
+            // So max safe offset is: min(edge_length) * sin(angle/2)
+
+            float halfAngle = angle * 0.5f;
+            float sinHalfAngle = Mathf.Sin(halfAngle);
+
+            // Prevent division by very small numbers
+            if (sinHalfAngle < 0.01f)
+            {
+                sinHalfAngle = 0.01f;
+            }
+
+            // Use the shorter adjacent edge as the limiting factor
+            float minEdgeLen = Mathf.Min(edgeLen1, edgeLen2);
+
+            // Maximum offset is limited by edge length and angle
+            // Use a safety factor of 0.4 to be conservative
+            float maxOffset = minEdgeLen * sinHalfAngle * 0.4f;
+
+            // Also limit based on overall edge lengths to prevent extreme offsets
+            maxOffset = Mathf.Min(maxOffset, minEdgeLen * 0.45f);
+
+            return maxOffset;
         }
 
         /// <summary>
