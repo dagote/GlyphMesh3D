@@ -419,9 +419,9 @@ namespace LanternPines.GlyphMesh3D.Generation
                 }
             }
 
-            // Generate UVs with quadrant mapping
-            // Face vertices (front/back) → Quadrant 1 (UV: 0-1, 0-1)
-            // Side vertices (extrusions) → Quadrant 2 (UV: 1-2, 0-1)
+            // Generate UVs with quadrant mapping (2x2 layout in 0-1 UV space)
+            // Face vertices (front/back) → Quadrant 1 (top-left: UV: 0-0.5, 0.5-1)
+            // Side vertices (extrusions) → Quadrant 2 (top-right: UV: 0.5-1, 0.5-1)
             var meshUVs = GenerateQuadrantMappedUVs(vertices, firstSideVertexIndex);
 
             allVertices.AddRange(vertices);
@@ -476,9 +476,9 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Generate UVs with quadrant mapping:
-        /// - Face vertices (0 to firstSideVertexIndex) → Quadrant 1 (UV: 0-1, 0-1)
-        /// - Side vertices (firstSideVertexIndex to end) → Quadrant 2 (UV: 1-2, 0-1)
+        /// Generate UVs with quadrant mapping (2x2 layout within 0-1 UV space):
+        /// - Face vertices (front/back) → Quadrant 1 (top-left): UV: 0-0.5, 0.5-1
+        /// - Side vertices (extrusions) → Quadrant 2 (top-right): UV: 0.5-1, 0.5-1
         /// </summary>
         private static List<Vector2> GenerateQuadrantMappedUVs(List<Vector3> vertices, int firstSideVertexIndex)
         {
@@ -487,7 +487,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (vertices.Count == 0)
                 return uvs;
 
-            // Calculate bounds for face vertices (quadrant 1)
+            // Calculate bounds for face vertices (quadrant 1: top-left)
             if (firstSideVertexIndex > 0)
             {
                 Vector3 faceMin = vertices[0];
@@ -507,16 +507,17 @@ namespace LanternPines.GlyphMesh3D.Generation
                 if (faceWidth < 0.0001f) faceWidth = 1f;
                 if (faceHeight < 0.0001f) faceHeight = 1f;
 
-                // Map face vertices to quadrant 1 (0-1, 0-1)
+                // Map face vertices to quadrant 1 (top-left: U: 0-0.5, V: 0.5-1)
                 for (int i = 0; i < firstSideVertexIndex; i++)
                 {
                     float normalizedX = (vertices[i].x - faceMin.x) / faceWidth;
                     float normalizedY = (vertices[i].y - faceMin.y) / faceHeight;
-                    uvs[i] = new Vector2(normalizedX, normalizedY);
+                    // Map to top-left quadrant
+                    uvs[i] = new Vector2(normalizedX * 0.5f, 0.5f + normalizedY * 0.5f);
                 }
             }
 
-            // Calculate bounds for side vertices (quadrant 2)
+            // Calculate bounds for side vertices (quadrant 2: top-right)
             if (firstSideVertexIndex < vertices.Count)
             {
                 Vector3 sideMin = vertices[firstSideVertexIndex];
@@ -536,13 +537,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                 if (sideWidth < 0.0001f) sideWidth = 1f;
                 if (sideHeight < 0.0001f) sideHeight = 1f;
 
-                // Map side vertices to quadrant 2 (1-2, 0-1)
+                // Map side vertices to quadrant 2 (top-right: U: 0.5-1, V: 0.5-1)
                 for (int i = firstSideVertexIndex; i < vertices.Count; i++)
                 {
                     float normalizedX = (vertices[i].x - sideMin.x) / sideWidth;
                     float normalizedY = (vertices[i].y - sideMin.y) / sideHeight;
-                    // Shift U coordinate by 1.0 to move to quadrant 2
-                    uvs[i] = new Vector2(1.0f + normalizedX, normalizedY);
+                    // Map to top-right quadrant
+                    uvs[i] = new Vector2(0.5f + normalizedX * 0.5f, 0.5f + normalizedY * 0.5f);
                 }
             }
 
