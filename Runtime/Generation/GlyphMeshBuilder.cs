@@ -603,21 +603,20 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Determine which quadrant this band should use
                         int bandQuadrant = GetBandQuadrant(layerIdx, totalBands);
 
+                        // Get the V range for this band within its quadrant
+                        // Bands sharing the same quadrant subdivide the vertical space
+                        GetBandVRange(layerIdx, totalBands, out float vMin, out float vMax);
+
                         // Generate normalized UVs (0-1) for this quad
                         // U wraps around the perimeter
                         float u0_norm = cumulativeDistance / totalPerimeter;
                         float u1_norm = (cumulativeDistance + edgeLength) / totalPerimeter;
 
-                        // V always uses full quadrant height (0-1) regardless of keyframe position
-                        // This keeps UVs "hard set" to quadrant - texture stretches with geometry
-                        float v0_norm = 0.0f;
-                        float v1_norm = 1.0f;
-
-                        // Map to appropriate quadrant
-                        meshUVs[curr0] = MapToQuadrant(u0_norm, v0_norm, bandQuadrant);
-                        meshUVs[curr1] = MapToQuadrant(u1_norm, v0_norm, bandQuadrant);
-                        meshUVs[next0] = MapToQuadrant(u0_norm, v1_norm, bandQuadrant);
-                        meshUVs[next1] = MapToQuadrant(u1_norm, v1_norm, bandQuadrant);
+                        // Map to appropriate quadrant with band-specific V range
+                        meshUVs[curr0] = MapToQuadrant(u0_norm, vMin, bandQuadrant);
+                        meshUVs[curr1] = MapToQuadrant(u1_norm, vMin, bandQuadrant);
+                        meshUVs[next0] = MapToQuadrant(u0_norm, vMax, bandQuadrant);
+                        meshUVs[next1] = MapToQuadrant(u1_norm, vMax, bandQuadrant);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
@@ -726,6 +725,43 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Multiple bands: last uses q3, all others use q2
             if (bandIndex == totalBands - 1) return 3;
             return 2;
+        }
+
+        /// <summary>
+        /// Calculate the V range (0-1) for a band within its assigned quadrant
+        /// Bands sharing the same quadrant subdivide the vertical space equally
+        /// </summary>
+        private static void GetBandVRange(int bandIndex, int totalBands, out float vMin, out float vMax)
+        {
+            if (totalBands == 0)
+            {
+                vMin = 0f;
+                vMax = 1f;
+                return;
+            }
+
+            if (totalBands == 1)
+            {
+                // Single band in q3 uses full height
+                vMin = 0f;
+                vMax = 1f;
+                return;
+            }
+
+            // Last band always goes in q3 with full height
+            if (bandIndex == totalBands - 1)
+            {
+                vMin = 0f;
+                vMax = 1f;
+                return;
+            }
+
+            // All other bands go in q2 and subdivide the space
+            int bandsInQ2 = totalBands - 1; // All except the last one
+            float heightPerBand = 1.0f / bandsInQ2;
+
+            vMin = bandIndex * heightPerBand;
+            vMax = (bandIndex + 1) * heightPerBand;
         }
 
         /// <summary>
