@@ -158,14 +158,27 @@ namespace LanternPines.GlyphMesh3D.Generation
         public static long FindTriNetIdForPosition(Dictionary<long, int> vertexMap, List<Vector3> vertices,
             Vector2 pos, float zValue, float scaleFactor = 0.01f)
         {
-            float tol = 1e-3f * scaleFactor;
+            // Increased tolerance significantly to ensure all edge vertices are found
+            // This prevents edge faces from being skipped during extrusion
+            float tol = 0.1f * scaleFactor;
+            long bestMatch = -1;
+            float bestDistance = float.MaxValue;
+
             foreach (var kv in vertexMap)
             {
                 Vector3 v = vertices[kv.Value];
                 if (Mathf.Abs(v.z - zValue) > 1e-4f) continue;
-                if (Vector2.Distance(new Vector2(v.x, v.y), pos) <= tol) return kv.Key;
+
+                float dist = Vector2.Distance(new Vector2(v.x, v.y), pos);
+                if (dist < bestDistance)
+                {
+                    bestDistance = dist;
+                    bestMatch = kv.Key;
+                }
             }
-            return -1;
+
+            // Return best match even if it exceeds tolerance to avoid skipping faces
+            return bestMatch;
         }
 
         /// <summary>

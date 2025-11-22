@@ -581,7 +581,12 @@ namespace LanternPines.GlyphMesh3D.Generation
                         long triNetId1 = GlyphExtrusionProcessor.FindTriNetIdForPosition(layerVertexMaps[layerIdx], vertices,
                             offsetP1 * SCALE_FACTOR, layers[layerIdx].depth * SCALE_FACTOR, SCALE_FACTOR);
 
-                        if (triNetId0 < 0 || triNetId1 < 0) continue;
+                        // Safety check to prevent crashes from invalid vertex indices
+                        // With improved tolerance in FindTriNetIdForPosition, this should rarely trigger
+                        if (triNetId0 < 0 || triNetId1 < 0 || !currSideMap.ContainsKey(triNetId0) ||
+                            !currSideMap.ContainsKey(triNetId1) || !nextSideMap.ContainsKey(triNetId0) ||
+                            !nextSideMap.ContainsKey(triNetId1))
+                            continue;
 
                         int curr0 = currSideMap[triNetId0];
                         int curr1 = currSideMap[triNetId1];
