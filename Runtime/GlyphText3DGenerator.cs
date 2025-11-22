@@ -241,17 +241,18 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 glyphText.fontAsset = defaultFont;
             }
-#endif
 
-            // Set up default material
+            // Set up default material from package
             MeshRenderer renderer = go.GetComponent<MeshRenderer>();
-            if (renderer != null && renderer.sharedMaterial == null)
+            if (renderer != null)
             {
-                // Try URP Lit first, fall back to Standard
-                Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-                if (shader == null)
-                    shader = Shader.Find("Standard");
+                Material defaultMaterial = LoadPackageMaterial();
+                if (defaultMaterial != null)
+                {
+                    renderer.sharedMaterial = defaultMaterial;
+                }
             }
+#endif
 
             // Set default values
             glyphText.text = "Sample Text";
@@ -662,9 +663,9 @@ namespace LanternPines.GlyphMesh3D.Core
         private static Material cachedDefaultMaterial;
 
         /// <summary>
-        /// Get appropriate default material based on the current render pipeline
+        /// Load appropriate package material based on the current render pipeline
         /// </summary>
-        private Material GetDefaultMaterial()
+        private static Material LoadPackageMaterial()
         {
             // Return cached material if it exists and is still valid
             if (cachedDefaultMaterial != null)
@@ -672,44 +673,82 @@ namespace LanternPines.GlyphMesh3D.Core
 
             Material defaultMat = null;
 
+#if UNITY_EDITOR
             // Check for URP/HDRP
             var renderPipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+            bool isURP = false;
+
             if (renderPipelineAsset != null)
             {
                 string pipelineName = renderPipelineAsset.GetType().Name;
-
-                if (pipelineName.Contains("Universal"))
-                {
-                    // URP
-                    var shader = Shader.Find("Universal Render Pipeline/Lit");
-                    if (shader == null) shader = Shader.Find("Lightweight Render Pipeline/Lit"); // Older URP
-                    if (shader != null) defaultMat = new Material(shader);
-                }
-                else if (pipelineName.Contains("HDRenderPipeline"))
-                {
-                    // HDRP
-                    var shader = Shader.Find("HDRP/Lit");
-                    if (shader != null) defaultMat = new Material(shader);
-                }
+                isURP = pipelineName.Contains("Universal");
             }
 
-            // Fall back to built-in pipeline
-            if (defaultMat == null)
-            {
-                var shader = Shader.Find("Standard");
-                if (shader == null) shader = Shader.Find("Diffuse"); // Ultimate fallback
-                if (shader != null) defaultMat = new Material(shader);
-            }
+            // Load package material based on pipeline
+            string materialPath = isURP
+                ? "Packages/com.lanternpines.glyphmesh3d/Runtime/Materials/GlyphTextMaterial_URP.mat"
+                : "Packages/com.lanternpines.glyphmesh3d/Runtime/Materials/GlyphTextMaterial_Default.mat";
 
-            // If we still don't have a material, create one with error shader
+            defaultMat = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+
+            // Fallback: search for materials by name if package path doesn't work
             if (defaultMat == null)
             {
-                defaultMat = new Material(Shader.Find("Hidden/InternalErrorShader"));
+                string materialName = isURP ? "GlyphTextMaterial_URP" : "GlyphTextMaterial_Default";
+                string[] guids = AssetDatabase.FindAssets($"{materialName} t:Material");
+                if (guids.Length > 0)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                    defaultMat = AssetDatabase.LoadAssetAtPath<Material>(path);
+                }
+            }
+#endif
+
+            // Ultimate fallback: create material from shader if package materials not found
+            if (defaultMat == null)
+            {
+                var renderPipelineAsset = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+                if (renderPipelineAsset != null)
+                {
+                    string pipelineName = renderPipelineAsset.GetType().Name;
+
+                    if (pipelineName.Contains("Universal"))
+                    {
+                        var shader = Shader.Find("Universal Render Pipeline/Lit");
+                        if (shader == null) shader = Shader.Find("Lightweight Render Pipeline/Lit");
+                        if (shader != null) defaultMat = new Material(shader);
+                    }
+                    else if (pipelineName.Contains("HDRenderPipeline"))
+                    {
+                        var shader = Shader.Find("HDRP/Lit");
+                        if (shader != null) defaultMat = new Material(shader);
+                    }
+                }
+
+                if (defaultMat == null)
+                {
+                    var shader = Shader.Find("Standard");
+                    if (shader == null) shader = Shader.Find("Diffuse");
+                    if (shader != null) defaultMat = new Material(shader);
+                }
+
+                if (defaultMat == null)
+                {
+                    defaultMat = new Material(Shader.Find("Hidden/InternalErrorShader"));
+                }
             }
 
             // Cache the material for reuse
             cachedDefaultMaterial = defaultMat;
             return defaultMat;
+        }
+
+        /// <summary>
+        /// Get appropriate default material based on the current render pipeline
+        /// </summary>
+        private Material GetDefaultMaterial()
+        {
+            return LoadPackageMaterial();
         }
     }
 
