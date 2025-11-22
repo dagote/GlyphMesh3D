@@ -530,10 +530,13 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Initialize UVs for all vertices
             var meshUVs = new List<Vector2>(new Vector2[vertices.Count]);
 
-            // Generate face UVs for layer vertices (quadrant 1)
-            GenerateFaceUVsQuadrant1(vertices, layerVertexMaps, meshUVs);
+            // Generate face UVs for layer vertices (q1 for front, q4 for back)
+            GenerateFaceUVs(vertices, layerVertexMaps, meshUVs);
 
             // Side faces with stepped UV unwrapping
+            // Calculate total number of extrusion bands
+            int totalBands = layers.Count - 1;
+
             for (int b = 0; b < boundaries.Count; b++)
             {
                 var boundary = boundaries[b];
@@ -558,7 +561,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                     Vector2 p1 = boundary[(i + 1) % n];
                     float edgeLength = Vector2.Distance(p0, p1);
 
-                    for (int layerIdx = 0; layerIdx < layers.Count - 1; layerIdx++)
+                    for (int layerIdx = 0; layerIdx < totalBands; layerIdx++)
                     {
                         var currSideMap = layerSideVertexMaps[layerIdx];
                         var nextSideMap = layerSideVertexMaps[layerIdx + 1];
@@ -597,16 +600,20 @@ namespace LanternPines.GlyphMesh3D.Generation
                         int next0 = nextSideMap[triNetId0];
                         int next1 = nextSideMap[triNetId1];
 
-                        // Generate stepped UVs for this quad (quadrant 2: U: 0.5-1, V: 0.5-1)
-                        float u0 = 0.5f + (cumulativeDistance / totalPerimeter) * 0.5f;
-                        float u1 = 0.5f + ((cumulativeDistance + edgeLength) / totalPerimeter) * 0.5f;
-                        float v0 = 0.5f + (layers[layerIdx].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
-                        float v1 = 0.5f + (layers[layerIdx + 1].depth / settings.ExtrusionProfile.extrusionDepth) * 0.5f;
+                        // Determine which quadrant this band should use
+                        int bandQuadrant = GetBandQuadrant(layerIdx, totalBands);
 
-                        meshUVs[curr0] = new Vector2(u0, v0);
-                        meshUVs[curr1] = new Vector2(u1, v0);
-                        meshUVs[next0] = new Vector2(u0, v1);
-                        meshUVs[next1] = new Vector2(u1, v1);
+                        // Generate normalized UVs (0-1) for this quad
+                        float u0_norm = cumulativeDistance / totalPerimeter;
+                        float u1_norm = (cumulativeDistance + edgeLength) / totalPerimeter;
+                        float v0_norm = layers[layerIdx].depth / settings.ExtrusionProfile.extrusionDepth;
+                        float v1_norm = layers[layerIdx + 1].depth / settings.ExtrusionProfile.extrusionDepth;
+
+                        // Map to appropriate quadrant
+                        meshUVs[curr0] = MapToQuadrant(u0_norm, v0_norm, bandQuadrant);
+                        meshUVs[curr1] = MapToQuadrant(u1_norm, v0_norm, bandQuadrant);
+                        meshUVs[next0] = MapToQuadrant(u0_norm, v1_norm, bandQuadrant);
+                        meshUVs[next1] = MapToQuadrant(u1_norm, v1_norm, bandQuadrant);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
@@ -677,9 +684,51 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Generate UVs for face vertices (front/back layers) in quadrant 1
+        /// Map normalized UV coordinates (0-1) to a specific quadrant
+        /// q1: top-left (U: 0-0.5, V: 0.5-1)
+        /// q2: top-right (U: 0.5-1, V: 0.5-1)
+        /// q3: bottom-left (U: 0-0.5, V: 0-0.5)
+        /// q4: bottom-right (U: 0.5-1, V: 0-0.5)
         /// </summary>
-        private static void GenerateFaceUVsQuadrant1(List<Vector3> vertices, List<Dictionary<long, int>> layerVertexMaps, List<Vector2> uvs)
+        private static Vector2 MapToQuadrant(float u, float v, int quadrant)
+        {
+            switch (quadrant)
+            {
+                case 1: // top-left
+                    return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
+                case 2: // top-right
+                    return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
+                case 3: // bottom-left
+                    return new Vector2(u * 0.5f, v * 0.5f);
+                case 4: // bottom-right
+                    return new Vector2(0.5f + u * 0.5f, v * 0.5f);
+                default:
+                    return new Vector2(u, v);
+            }
+        }
+
+        /// <summary>
+        /// Determine which quadrant to use for a specific extrusion band
+        /// Pattern:
+        /// - 0 bands: none (only caps)
+        /// - 1 band: q3
+        /// - 2 bands: q2, q3
+        /// - 3+ bands: q2, q2, ..., q3
+        /// </summary>
+        private static int GetBandQuadrant(int bandIndex, int totalBands)
+        {
+            if (totalBands == 0) return 2; // Shouldn't happen, default to q2
+            if (totalBands == 1) return 3; // Single band uses q3
+            // Multiple bands: last uses q3, all others use q2
+            if (bandIndex == totalBands - 1) return 3;
+            return 2;
+        }
+
+        /// <summary>
+        /// Generate UVs for face vertices (front/back caps) in appropriate quadrants
+        /// Front cap: q1 (top-left), Back cap: q4 (bottom-right)
+        /// </summary>
+        private static void GenerateFaceUVs(List<Vector3> vertices, List<Dictionary<long, int>> layerVertexMaps, List<Vector2> uvs)
         {
             if (layerVertexMaps.Count == 0) return;
 
@@ -709,13 +758,20 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (width < 0.0001f) width = 1f;
             if (height < 0.0001f) height = 1f;
 
-            // Map all layer vertices to quadrant 1 (top-left: U: 0-0.5, V: 0.5-1)
-            foreach (int idx in allLayerIndices)
+            // Map front cap to q1, back cap to q4
+            int frontLayerIdx = 0;
+            int backLayerIdx = layerVertexMaps.Count - 1;
+
+            for (int layerIdx = 0; layerIdx < layerVertexMaps.Count; layerIdx++)
             {
-                float normalizedX = (vertices[idx].x - min.x) / width;
-                float normalizedY = (vertices[idx].y - min.y) / height;
-                // Map to top-left quadrant
-                uvs[idx] = new Vector2(normalizedX * 0.5f, 0.5f + normalizedY * 0.5f);
+                int quadrant = (layerIdx == frontLayerIdx) ? 1 : 4; // q1 for front, q4 for back
+
+                foreach (int idx in layerVertexMaps[layerIdx].Values)
+                {
+                    float normalizedX = (vertices[idx].x - min.x) / width;
+                    float normalizedY = (vertices[idx].y - min.y) / height;
+                    uvs[idx] = MapToQuadrant(normalizedX, normalizedY, quadrant);
+                }
             }
         }
 
