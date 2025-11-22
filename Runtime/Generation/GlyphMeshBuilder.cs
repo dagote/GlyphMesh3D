@@ -319,6 +319,10 @@ namespace LanternPines.GlyphMesh3D.Generation
                 }
             }
 
+            // Track vertex types for UV mapping
+            int totalLayerVertices = layerVertexMaps.Sum(m => m.Count);
+            int firstSideVertexIndex = totalLayerVertices;
+
             // Initialize normals
             var meshNormals = new Vector3[vertices.Count];
             for (int i = 0; i < vertices.Count; i++)
@@ -415,8 +419,10 @@ namespace LanternPines.GlyphMesh3D.Generation
                 }
             }
 
-            // Generate UVs (placeholder - will be enhanced with XAtlas)
-            var meshUVs = GeneratePlanarUVs(vertices, true);
+            // Generate UVs with quadrant mapping
+            // Face vertices (front/back) → Quadrant 1 (UV: 0-1, 0-1)
+            // Side vertices (extrusions) → Quadrant 2 (UV: 1-2, 0-1)
+            var meshUVs = GenerateQuadrantMappedUVs(vertices, firstSideVertexIndex);
 
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
@@ -458,18 +464,86 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (width < 0.0001f) width = 1f;
             if (height < 0.0001f) height = 1f;
 
-            float uMin = 0f;
-            float uMax = 0.25f;
-            float vMin = isFrontFace ? 0.5f : 0f;
-            float vMax = isFrontFace ? 1.0f : 0.5f;
-
+            // Map to full quadrant 1 (0-1, 0-1)
             foreach (var v in vertices)
             {
                 float normalizedX = (v.x - min.x) / width;
                 float normalizedY = (v.y - min.y) / height;
-                float u = Mathf.Lerp(uMin, uMax, normalizedX);
-                float vCoord = Mathf.Lerp(vMin, vMax, normalizedY);
-                uvs.Add(new Vector2(u, vCoord));
+                uvs.Add(new Vector2(normalizedX, normalizedY));
+            }
+
+            return uvs;
+        }
+
+        /// <summary>
+        /// Generate UVs with quadrant mapping:
+        /// - Face vertices (0 to firstSideVertexIndex) → Quadrant 1 (UV: 0-1, 0-1)
+        /// - Side vertices (firstSideVertexIndex to end) → Quadrant 2 (UV: 1-2, 0-1)
+        /// </summary>
+        private static List<Vector2> GenerateQuadrantMappedUVs(List<Vector3> vertices, int firstSideVertexIndex)
+        {
+            var uvs = new List<Vector2>(new Vector2[vertices.Count]);
+
+            if (vertices.Count == 0)
+                return uvs;
+
+            // Calculate bounds for face vertices (quadrant 1)
+            if (firstSideVertexIndex > 0)
+            {
+                Vector3 faceMin = vertices[0];
+                Vector3 faceMax = vertices[0];
+
+                for (int i = 0; i < firstSideVertexIndex; i++)
+                {
+                    faceMin.x = Mathf.Min(faceMin.x, vertices[i].x);
+                    faceMin.y = Mathf.Min(faceMin.y, vertices[i].y);
+                    faceMax.x = Mathf.Max(faceMax.x, vertices[i].x);
+                    faceMax.y = Mathf.Max(faceMax.y, vertices[i].y);
+                }
+
+                float faceWidth = faceMax.x - faceMin.x;
+                float faceHeight = faceMax.y - faceMin.y;
+
+                if (faceWidth < 0.0001f) faceWidth = 1f;
+                if (faceHeight < 0.0001f) faceHeight = 1f;
+
+                // Map face vertices to quadrant 1 (0-1, 0-1)
+                for (int i = 0; i < firstSideVertexIndex; i++)
+                {
+                    float normalizedX = (vertices[i].x - faceMin.x) / faceWidth;
+                    float normalizedY = (vertices[i].y - faceMin.y) / faceHeight;
+                    uvs[i] = new Vector2(normalizedX, normalizedY);
+                }
+            }
+
+            // Calculate bounds for side vertices (quadrant 2)
+            if (firstSideVertexIndex < vertices.Count)
+            {
+                Vector3 sideMin = vertices[firstSideVertexIndex];
+                Vector3 sideMax = vertices[firstSideVertexIndex];
+
+                for (int i = firstSideVertexIndex; i < vertices.Count; i++)
+                {
+                    sideMin.x = Mathf.Min(sideMin.x, vertices[i].x);
+                    sideMin.y = Mathf.Min(sideMin.y, vertices[i].y);
+                    sideMax.x = Mathf.Max(sideMax.x, vertices[i].x);
+                    sideMax.y = Mathf.Max(sideMax.y, vertices[i].y);
+                }
+
+                float sideWidth = sideMax.x - sideMin.x;
+                float sideHeight = sideMax.y - sideMin.y;
+
+                if (sideWidth < 0.0001f) sideWidth = 1f;
+                if (sideHeight < 0.0001f) sideHeight = 1f;
+
+                // Map side vertices to quadrant 2 (1-2, 0-1)
+                for (int i = firstSideVertexIndex; i < vertices.Count; i++)
+                {
+                    float normalizedX = (vertices[i].x - sideMin.x) / sideWidth;
+                    float normalizedY = (vertices[i].y - sideMin.y) / sideHeight;
+                    // Shift U coordinate by 1.0 to move to quadrant 2
+                    uvs[i] = new Vector2(1.0f + normalizedX, normalizedY);
+                }
             }
 
             return uvs;
