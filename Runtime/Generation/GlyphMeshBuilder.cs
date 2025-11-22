@@ -182,13 +182,13 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                     if (Mathf.Abs(avgZ - frontZ) < zTolerance)
                     {
-                        // Front cap - normal should point +Z
-                        if (faceNormal.z < 0) needsFlip = true;
+                        // Front cap - normal should point -Z (outward from solid)
+                        if (faceNormal.z > 0) needsFlip = true;
                     }
                     else if (Mathf.Abs(avgZ - backZ) < zTolerance)
                     {
-                        // Back cap - normal should point -Z
-                        if (faceNormal.z > 0) needsFlip = true;
+                        // Back cap - normal should point +Z (outward from solid)
+                        if (faceNormal.z < 0) needsFlip = true;
                     }
                     else
                     {
