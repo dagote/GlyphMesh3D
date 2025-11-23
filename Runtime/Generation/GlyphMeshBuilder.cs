@@ -442,8 +442,8 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             // Create additional duplicate vertices for the last band's starting layer
-            // This prevents the last band (Q2) from sharing vertices with the second-to-last band (Q3)
-            // Without this, the boundary between Q3 and Q2 bands would have mixed quadrant UVs
+            // This prevents the last band (Q3) from sharing vertices with the second-to-last band (Q2)
+            // Without this, the boundary between Q2 and Q3 bands would have mixed quadrant UVs
             Dictionary<long, int> lastBandStartMap = null;
             if (layers.Count > 2) // Only needed when there are 2+ bands (3+ layers)
             {
@@ -632,7 +632,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Map full quadrant to each edge face (not unwrapped around perimeter)
                         // For solid color quadrants, each face shows the complete quadrant
                         // Set UVs for ALL vertices (both start and end) to ensure each quad uses a single quadrant
-                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q3 vs Q2)
+                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q2 vs Q3)
                         meshUVs[curr0] = MapToQuadrant(0f, vMin, bandQuadrant);
                         meshUVs[curr1] = MapToQuadrant(1f, vMin, bandQuadrant);
                         meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
@@ -709,8 +709,8 @@ namespace LanternPines.GlyphMesh3D.Generation
         /// <summary>
         /// Map normalized UV coordinates (0-1) to a specific quadrant
         /// q1: top-left (U: 0-0.5, V: 0.5-1)
-        /// q2: top-right (U: 0.5-1, V: 0.5-1)
-        /// q3: bottom-left (U: 0-0.5, V: 0-0.5)
+        /// q2: bottom-left (U: 0-0.5, V: 0-0.5) - LOOPING bands
+        /// q3: top-right (U: 0.5-1, V: 0.5-1) - FINAL band before back cap
         /// q4: bottom-right (U: 0.5-1, V: 0-0.5)
         /// </summary>
         private static Vector2 MapToQuadrant(float u, float v, int quadrant)
@@ -719,10 +719,10 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 case 1: // top-left
                     return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
-                case 2: // top-right
-                    return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
-                case 3: // bottom-left
+                case 2: // bottom-left (LOOPING)
                     return new Vector2(u * 0.5f, v * 0.5f);
+                case 3: // top-right (FINAL)
+                    return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
                 case 4: // bottom-right
                     return new Vector2(0.5f + u * 0.5f, v * 0.5f);
                 default:
