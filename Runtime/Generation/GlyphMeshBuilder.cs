@@ -441,6 +441,21 @@ namespace LanternPines.GlyphMesh3D.Generation
                 layerSideVertexMaps.Add(sideMap);
             }
 
+            // Create additional duplicate vertices for the last band's starting layer
+            // This prevents the last band (Q3) from sharing vertices with the second-to-last band (Q2)
+            // Without this, the boundary between Q2 and Q3 bands would have mixed quadrant UVs
+            Dictionary<long, int> lastBandStartMap = null;
+            if (layers.Count > 2) // Only needed when there are 2+ bands (3+ layers)
+            {
+                int secondToLastLayerIdx = layers.Count - 2;
+                lastBandStartMap = new Dictionary<long, int>();
+                foreach (var kv in layerVertexMaps[secondToLastLayerIdx])
+                {
+                    lastBandStartMap[kv.Key] = vertices.Count;
+                    vertices.Add(vertices[kv.Value]);
+                }
+            }
+
             // Build slot map
             var slotMap = new MaterialSlotMap(layers.Count);
             var materials = settings.Materials ?? new Material[0];
@@ -563,7 +578,9 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                     for (int layerIdx = 0; layerIdx < totalBands; layerIdx++)
                     {
-                        var currSideMap = layerSideVertexMaps[layerIdx];
+                        // Use special duplicate vertices for the last band to prevent quadrant mixing
+                        bool isLastBand = (layerIdx == totalBands - 1);
+                        var currSideMap = (isLastBand && lastBandStartMap != null) ? lastBandStartMap : layerSideVertexMaps[layerIdx];
                         var nextSideMap = layerSideVertexMaps[layerIdx + 1];
 
                         Vector2 offsetP0 = p0;
@@ -614,17 +631,12 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                         // Map full quadrant to each edge face (not unwrapped around perimeter)
                         // For solid color quadrants, each face shows the complete quadrant
-                        // Only set UVs for the START vertices (curr) to avoid overwriting shared vertices
-                        // The END vertices (next) will be set when the next band processes them as START
+                        // Set UVs for ALL vertices (both start and end) to ensure each quad uses a single quadrant
+                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q2 vs Q3)
                         meshUVs[curr0] = MapToQuadrant(0f, vMin, bandQuadrant);
                         meshUVs[curr1] = MapToQuadrant(1f, vMin, bandQuadrant);
-
-                        // For the LAST band, also set the END vertices since no other band will
-                        if (layerIdx == totalBands - 1)
-                        {
-                            meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
-                            meshUVs[next1] = MapToQuadrant(1f, vMax, bandQuadrant);
-                        }
+                        meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
+                        meshUVs[next1] = MapToQuadrant(1f, vMax, bandQuadrant);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
