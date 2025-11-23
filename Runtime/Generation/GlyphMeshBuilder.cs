@@ -708,7 +708,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Map normalized UV coordinates (0-1) to a specific quadrant with 5-pixel padding inset from quadrant center
+        /// Map normalized UV coordinates (0-1) to a specific quadrant with 10-pixel padding inset from quadrant center
         /// q1: top-left (U: 0-0.5, V: 0.5-1)
         /// q2: bottom-left (U: 0-0.5, V: 0-0.5) - LOOPING bands
         /// q3: top-right (U: 0.5-1, V: 0.5-1) - FINAL band before back cap
@@ -719,12 +719,12 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Calculate 1 pixel in UV space
             float pixelSize = 1.0f / uvResolution;
 
-            // Scale and offset to account for 5-pixel padding on each side (inset from quadrant center)
+            // Scale and offset to account for 10-pixel padding on each side (inset from quadrant center)
             // Each quadrant is 0.5 wide/tall
-            // After padding on both sides, usable space is (0.5 - 10*pixelSize)
-            float usableSize = 0.5f - 10.0f * pixelSize;
-            float paddedU = 5.0f * pixelSize + u * usableSize;
-            float paddedV = 5.0f * pixelSize + v * usableSize;
+            // After padding on both sides, usable space is (0.5 - 20*pixelSize)
+            float usableSize = 0.5f - 20.0f * pixelSize;
+            float paddedU = 10.0f * pixelSize + u * usableSize;
+            float paddedV = 10.0f * pixelSize + v * usableSize;
 
             switch (quadrant)
             {
