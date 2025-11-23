@@ -606,7 +606,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Debug: Log quadrant assignment
                         if (b == 0 && i == 0) // Only log once per band to avoid spam
                         {
-                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}");
+                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}, Layer depths: {layers[layerIdx].depth} -> {layers[layerIdx + 1].depth}");
                         }
 
                         // Get the V range for this band within its quadrant
