@@ -442,8 +442,8 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             // Create additional duplicate vertices for the last band's starting layer
-            // This prevents the last band (Q3) from sharing vertices with the second-to-last band (Q2)
-            // Without this, the boundary between Q2 and Q3 bands would have mixed quadrant UVs
+            // This prevents the last band (Q2) from sharing vertices with the second-to-last band (Q3)
+            // Without this, the boundary between Q3 and Q2 bands would have mixed quadrant UVs
             Dictionary<long, int> lastBandStartMap = null;
             if (layers.Count > 2) // Only needed when there are 2+ bands (3+ layers)
             {
@@ -632,7 +632,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Map full quadrant to each edge face (not unwrapped around perimeter)
                         // For solid color quadrants, each face shows the complete quadrant
                         // Set UVs for ALL vertices (both start and end) to ensure each quad uses a single quadrant
-                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q2 vs Q3)
+                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q3 vs Q2)
                         meshUVs[curr0] = MapToQuadrant(0f, vMin, bandQuadrant);
                         meshUVs[curr1] = MapToQuadrant(1f, vMin, bandQuadrant);
                         meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
@@ -709,8 +709,8 @@ namespace LanternPines.GlyphMesh3D.Generation
         /// <summary>
         /// Map normalized UV coordinates (0-1) to a specific quadrant
         /// q1: top-left (U: 0-0.5, V: 0.5-1)
-        /// q2: bottom-left (U: 0-0.5, V: 0-0.5) - LOOPING bands
-        /// q3: top-right (U: 0.5-1, V: 0.5-1) - FINAL band before back cap
+        /// q2: top-right (U: 0.5-1, V: 0.5-1) - FINAL band before back cap
+        /// q3: bottom-left (U: 0-0.5, V: 0-0.5) - LOOPING bands
         /// q4: bottom-right (U: 0.5-1, V: 0-0.5)
         /// </summary>
         private static Vector2 MapToQuadrant(float u, float v, int quadrant)
@@ -719,10 +719,10 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 case 1: // top-left
                     return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
-                case 2: // bottom-left (LOOPING)
-                    return new Vector2(u * 0.5f, v * 0.5f);
-                case 3: // top-right (FINAL)
+                case 2: // top-right (FINAL)
                     return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
+                case 3: // bottom-left (LOOPING)
+                    return new Vector2(u * 0.5f, v * 0.5f);
                 case 4: // bottom-right
                     return new Vector2(0.5f + u * 0.5f, v * 0.5f);
                 default:
@@ -734,18 +734,18 @@ namespace LanternPines.GlyphMesh3D.Generation
         /// Determine which quadrant to use for a specific extrusion band
         /// Pattern:
         /// - 0 bands: none (only caps)
-        /// - 1 band: q3 (final before back cap)
-        /// - 2 bands: q2, q3
-        /// - 3+ bands: q2, q2, ..., q3
-        /// Q2 loops for all middle bands, Q3 is the final band before the back cap
+        /// - 1 band: q2 (final before back cap)
+        /// - 2 bands: q3, q2
+        /// - 3+ bands: q3, q3, ..., q2
+        /// Q3 loops for all middle bands, Q2 is the final band before the back cap
         /// </summary>
         private static int GetBandQuadrant(int bandIndex, int totalBands)
         {
-            if (totalBands == 0) return 2; // Shouldn't happen, default to q2
-            if (totalBands == 1) return 3; // Single band uses q3 (final)
-            // Multiple bands: last uses q3 (final), all others use q2 (looping)
-            if (bandIndex == totalBands - 1) return 3;
-            return 2;
+            if (totalBands == 0) return 3; // Shouldn't happen, default to q3
+            if (totalBands == 1) return 2; // Single band uses q2 (final)
+            // Multiple bands: last uses q2 (final), all others use q3 (looping)
+            if (bandIndex == totalBands - 1) return 2;
+            return 3;
         }
 
         /// <summary>
