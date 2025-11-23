@@ -719,10 +719,10 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 case 1: // top-left
                     return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
-                case 2: // bottom-left (LOOPING)
-                    return new Vector2(u * 0.5f, v * 0.5f);
-                case 3: // top-right (FINAL)
+                case 2: // top-right (LOOPING)
                     return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
+                case 3: // bottom-left (FINAL)
+                    return new Vector2(u * 0.5f, v * 0.5f);
                 case 4: // bottom-right
                     return new Vector2(0.5f + u * 0.5f, v * 0.5f);
                 default:
