@@ -546,7 +546,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             var meshUVs = new List<Vector2>(new Vector2[vertices.Count]);
 
             // Generate face UVs for layer vertices (q1 for front, q4 for back)
-            GenerateFaceUVs(vertices, layerVertexMaps, meshUVs);
+            GenerateFaceUVs(vertices, layerVertexMaps, meshUVs, settings.UVResolution);
 
             // Side faces with stepped UV unwrapping
             // Calculate total number of extrusion bands
@@ -634,10 +634,10 @@ namespace LanternPines.GlyphMesh3D.Generation
                         float uEnd = (cumulativeDistance + edgeLength) / totalPerimeter;
 
                         // V=0 at current layer, V=1 at next layer (varies across depth)
-                        meshUVs[curr0] = MapToQuadrant(uStart, 0f, bandQuadrant);
-                        meshUVs[curr1] = MapToQuadrant(uEnd, 0f, bandQuadrant);
-                        meshUVs[next0] = MapToQuadrant(uStart, 1f, bandQuadrant);
-                        meshUVs[next1] = MapToQuadrant(uEnd, 1f, bandQuadrant);
+                        meshUVs[curr0] = MapToQuadrant(uStart, 0f, bandQuadrant, settings.UVResolution);
+                        meshUVs[curr1] = MapToQuadrant(uEnd, 0f, bandQuadrant, settings.UVResolution);
+                        meshUVs[next0] = MapToQuadrant(uStart, 1f, bandQuadrant, settings.UVResolution);
+                        meshUVs[next1] = MapToQuadrant(uEnd, 1f, bandQuadrant, settings.UVResolution);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
@@ -708,24 +708,34 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         /// <summary>
-        /// Map normalized UV coordinates (0-1) to a specific quadrant
+        /// Map normalized UV coordinates (0-1) to a specific quadrant with 1-pixel padding inset
         /// q1: top-left (U: 0-0.5, V: 0.5-1)
         /// q2: bottom-left (U: 0-0.5, V: 0-0.5) - LOOPING bands
         /// q3: top-right (U: 0.5-1, V: 0.5-1) - FINAL band before back cap
         /// q4: bottom-right (U: 0.5-1, V: 0-0.5)
         /// </summary>
-        private static Vector2 MapToQuadrant(float u, float v, int quadrant)
+        private static Vector2 MapToQuadrant(float u, float v, int quadrant, float uvResolution = 1024f)
         {
+            // Calculate 1 pixel in UV space
+            float pixelSize = 1.0f / uvResolution;
+
+            // Scale and offset to account for 1-pixel padding on each side
+            // Each quadrant is 0.5 wide/tall
+            // After padding on both sides, usable space is (0.5 - 2*pixelSize)
+            float usableSize = 0.5f - 2.0f * pixelSize;
+            float paddedU = pixelSize + u * usableSize;
+            float paddedV = pixelSize + v * usableSize;
+
             switch (quadrant)
             {
                 case 1: // top-left
-                    return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
+                    return new Vector2(paddedU, 0.5f + paddedV);
                 case 2: // LOOPING
-                    return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
+                    return new Vector2(0.5f + paddedU, 0.5f + paddedV);
                 case 3: // FINAL
-                    return new Vector2(u * 0.5f, v * 0.5f);
+                    return new Vector2(paddedU, paddedV);
                 case 4: // bottom-right
-                    return new Vector2(0.5f + u * 0.5f, v * 0.5f);
+                    return new Vector2(0.5f + paddedU, paddedV);
                 default:
                     return new Vector2(u, v);
             }
@@ -765,7 +775,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         /// Generate UVs for face vertices (front/back caps) in appropriate quadrants
         /// Front cap: q1 (top-left), Back cap: q4 (bottom-right)
         /// </summary>
-        private static void GenerateFaceUVs(List<Vector3> vertices, List<Dictionary<long, int>> layerVertexMaps, List<Vector2> uvs)
+        private static void GenerateFaceUVs(List<Vector3> vertices, List<Dictionary<long, int>> layerVertexMaps, List<Vector2> uvs, float uvResolution)
         {
             if (layerVertexMaps.Count == 0) return;
 
@@ -807,7 +817,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 {
                     float normalizedX = (vertices[idx].x - min.x) / width;
                     float normalizedY = (vertices[idx].y - min.y) / height;
-                    uvs[idx] = MapToQuadrant(normalizedX, normalizedY, quadrant);
+                    uvs[idx] = MapToQuadrant(normalizedX, normalizedY, quadrant, uvResolution);
                 }
             }
         }
