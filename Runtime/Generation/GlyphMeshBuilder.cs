@@ -719,9 +719,9 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 case 1: // top-left
                     return new Vector2(u * 0.5f, 0.5f + v * 0.5f);
-                case 2: // top-right (LOOPING)
+                case 2: // LOOPING - maps to RED texture (top-right)
                     return new Vector2(0.5f + u * 0.5f, 0.5f + v * 0.5f);
-                case 3: // bottom-left (FINAL)
+                case 3: // FINAL - maps to PURPLE texture (bottom-left)
                     return new Vector2(u * 0.5f, v * 0.5f);
                 case 4: // bottom-right
                     return new Vector2(0.5f + u * 0.5f, v * 0.5f);
