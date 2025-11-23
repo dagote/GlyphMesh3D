@@ -614,11 +614,17 @@ namespace LanternPines.GlyphMesh3D.Generation
 
                         // Map full quadrant to each edge face (not unwrapped around perimeter)
                         // For solid color quadrants, each face shows the complete quadrant
-                        // curr0 = bottom-left, curr1 = bottom-right, next0 = top-left, next1 = top-right
+                        // Only set UVs for the START vertices (curr) to avoid overwriting shared vertices
+                        // The END vertices (next) will be set when the next band processes them as START
                         meshUVs[curr0] = MapToQuadrant(0f, vMin, bandQuadrant);
                         meshUVs[curr1] = MapToQuadrant(1f, vMin, bandQuadrant);
-                        meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
-                        meshUVs[next1] = MapToQuadrant(1f, vMax, bandQuadrant);
+
+                        // For the LAST band, also set the END vertices since no other band will
+                        if (layerIdx == totalBands - 1)
+                        {
+                            meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
+                            meshUVs[next1] = MapToQuadrant(1f, vMax, bandQuadrant);
+                        }
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
