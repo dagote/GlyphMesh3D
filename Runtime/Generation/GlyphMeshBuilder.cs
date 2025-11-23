@@ -626,17 +626,16 @@ namespace LanternPines.GlyphMesh3D.Generation
                             Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}, Layer depths: {layers[layerIdx].depth} -> {layers[layerIdx + 1].depth}");
                         }
 
-                        // Get the V range for this band within its quadrant
-                        GetBandVRange(layerIdx, totalBands, out float vMin, out float vMax);
+                        // Use constant V value for solid color per quadrant
+                        // This prevents gradients within the same quadrant
+                        float vConst = 0.5f; // Center of the V range for solid color sampling
 
-                        // Map full quadrant to each edge face (not unwrapped around perimeter)
-                        // For solid color quadrants, each face shows the complete quadrant
-                        // Set UVs for ALL vertices (both start and end) to ensure each quad uses a single quadrant
-                        // This prevents mixed quadrants when adjacent bands use different quadrants (Q2 vs Q3)
-                        meshUVs[curr0] = MapToQuadrant(0f, vMin, bandQuadrant);
-                        meshUVs[curr1] = MapToQuadrant(1f, vMin, bandQuadrant);
-                        meshUVs[next0] = MapToQuadrant(0f, vMax, bandQuadrant);
-                        meshUVs[next1] = MapToQuadrant(1f, vMax, bandQuadrant);
+                        // Map to quadrant with constant V to ensure solid color
+                        // U varies (0 to 1) to wrap around the perimeter, V stays constant for uniform color
+                        meshUVs[curr0] = MapToQuadrant(0f, vConst, bandQuadrant);
+                        meshUVs[curr1] = MapToQuadrant(1f, vConst, bandQuadrant);
+                        meshUVs[next0] = MapToQuadrant(0f, vConst, bandQuadrant);
+                        meshUVs[next1] = MapToQuadrant(1f, vConst, bandQuadrant);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
