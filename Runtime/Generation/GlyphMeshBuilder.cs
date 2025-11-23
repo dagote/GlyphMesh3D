@@ -603,6 +603,12 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Determine which quadrant this band should use
                         int bandQuadrant = GetBandQuadrant(layerIdx, totalBands);
 
+                        // Debug: Log quadrant assignment
+                        if (b == 0 && i == 0) // Only log once per band to avoid spam
+                        {
+                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}");
+                        }
+
                         // Get the V range for this band within its quadrant
                         GetBandVRange(layerIdx, totalBands, out float vMin, out float vMax);
 
