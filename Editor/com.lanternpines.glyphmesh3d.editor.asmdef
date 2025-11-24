@@ -1,0 +1,19 @@
+{
+  "name": "com.lanternpines.glyphmesh3d.editor",
+  "rootNamespace": "LanternPines.GlyphMesh3D.Editor",
+  "references": [
+    "com.lanternpines.glyphmesh3d.runtime",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
