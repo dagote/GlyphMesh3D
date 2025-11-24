@@ -80,6 +80,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             var allVertices = new List<Vector3>();
             var allNormals = new List<Vector3>();
             var allUVs = new List<Vector2>();
+            var allUV2s = new List<Vector2>();  // UV2 channel for band indices
             var submeshData = new Dictionary<Material, List<int>>();
 
             // Determine if we use curved extrusion
@@ -91,11 +92,11 @@ namespace LanternPines.GlyphMesh3D.Generation
 
             if (useCurvedExtrusion)
             {
-                GenerateCurvedMesh(boundaries, settings, allVertices, allNormals, allUVs, submeshData);
+                GenerateCurvedMesh(boundaries, settings, allVertices, allNormals, allUVs, allUV2s, submeshData);
             }
             else
             {
-                GenerateStraightMesh(boundaries, settings, allVertices, allNormals, allUVs, submeshData);
+                GenerateStraightMesh(boundaries, settings, allVertices, allNormals, allUVs, allUV2s, submeshData);
             }
 
             if (allVertices.Count == 0 || submeshData.Count == 0)
@@ -105,6 +106,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             combinedMesh.vertices = allVertices.ToArray();
             combinedMesh.normals = allNormals.ToArray();
             combinedMesh.uv = allUVs.ToArray();
+            combinedMesh.uv2 = allUV2s.ToArray();  // Band indices in UV2 channel
 
             // Build submeshes based on material slot map
             var slotMap = new MaterialSlotMap(settings.ExtrusionProfile != null ? settings.ExtrusionProfile.KeyframeCount : 1);
@@ -291,7 +293,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         private static void GenerateStraightMesh(List<List<Vector2>> boundaries, MeshBuildSettings settings,
-            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
+            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs, List<Vector2> allUV2s,
             Dictionary<Material, List<int>> submeshData)
         {
             var triangulation = GlyphTriangulator.Triangulate(boundaries);
@@ -354,9 +356,15 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Simple planar UV projection
             var meshUVs = GeneratePlanarUVs(vertices, true);
 
+            // UV2: Band indices (use -1 for non-extruded meshes)
+            var meshUV2s = new Vector2[vertices.Count];
+            for (int i = 0; i < vertices.Count; i++)
+                meshUV2s[i] = new Vector2(-1f, 0f);
+
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
             allUVs.AddRange(meshUVs);
+            allUV2s.AddRange(meshUV2s);
 
             // Add triangles to face material (slot 0)
             var materials = settings.Materials ?? new Material[0];
@@ -374,7 +382,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         private static void GenerateCurvedMesh(List<List<Vector2>> boundaries, MeshBuildSettings settings,
-            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
+            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs, List<Vector2> allUV2s,
             Dictionary<Material, List<int>> submeshData)
         {
             var triangulation = GlyphTriangulator.Triangulate(boundaries);
@@ -545,6 +553,11 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Initialize UVs for all vertices
             var meshUVs = new List<Vector2>(new Vector2[vertices.Count]);
 
+            // Initialize UV2s for band indices (default to -1 for cap faces)
+            var meshUV2s = new List<Vector2>(new Vector2[vertices.Count]);
+            for (int i = 0; i < vertices.Count; i++)
+                meshUV2s[i] = new Vector2(-1f, 0f);
+
             // Generate face UVs for layer vertices (q1 for front, q4 for back)
             GenerateFaceUVs(vertices, layerVertexMaps, meshUVs, settings.UVResolution);
 
@@ -639,6 +652,17 @@ namespace LanternPines.GlyphMesh3D.Generation
                         meshUVs[next0] = MapToQuadrant(uStart, 1f, bandQuadrant, settings.UVResolution);
                         meshUVs[next1] = MapToQuadrant(uEnd, 1f, bandQuadrant, settings.UVResolution);
 
+                        // Set band index in UV2 for Q2 (looping) bands
+                        // Q2 bands are all except the last one (which uses Q3)
+                        if (bandQuadrant == 2)
+                        {
+                            float bandIndex = layerIdx;  // Band index for array lookup
+                            meshUV2s[curr0] = new Vector2(bandIndex, 0f);
+                            meshUV2s[curr1] = new Vector2(bandIndex, 0f);
+                            meshUV2s[next0] = new Vector2(bandIndex, 0f);
+                            meshUV2s[next1] = new Vector2(bandIndex, 0f);
+                        }
+
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
 
@@ -694,6 +718,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
             allUVs.AddRange(meshUVs);
+            allUV2s.AddRange(meshUV2s);  // Add UV2 band indices
 
             foreach (var kvp in localSubmeshData)
             {
