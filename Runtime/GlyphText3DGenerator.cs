@@ -983,5 +983,4 @@ namespace LanternPines.GlyphMesh3D.Core
         }
     }
 #endif
-    }
 }
