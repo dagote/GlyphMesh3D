@@ -168,6 +168,17 @@ namespace LanternPines.GlyphMesh3D.Core
         public AnimationCurve GetCurve() => curve;
     }
 
+    /// <summary>
+    /// Color mode for extrusion bands
+    /// </summary>
+    public enum BandColorMode
+    {
+        Gradient,       // Interpolate between two colors
+        Rainbow,        // Full HSV rainbow spectrum
+        Custom,         // Use custom color array
+        SingleColor     // All bands same color
+    }
+
     [ExecuteInEditMode]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class GlyphText3DGenerator : MonoBehaviour
@@ -185,6 +196,28 @@ namespace LanternPines.GlyphMesh3D.Core
 
         [Tooltip("Curve controls perpendicular offset progression (X: 0-1 depth, Y: 0-1 offset strength). Keyframe count determines extrusion layer count.")]
         [SerializeField] internal ExtrusionProfileCurve extrusionProfile = new ExtrusionProfileCurve();
+
+        [Header("Band Colors")]
+        [Tooltip("Color scheme for extrusion bands")]
+        [SerializeField] private BandColorMode bandColorMode = BandColorMode.Gradient;
+
+        [Tooltip("Start color for gradient mode")]
+        [SerializeField] private Color gradientStart = Color.cyan;
+
+        [Tooltip("End color for gradient mode")]
+        [SerializeField] private Color gradientEnd = Color.magenta;
+
+        [Tooltip("Custom colors for each band (used in Custom mode)")]
+        [SerializeField] private Color[] customBandColors = new Color[0];
+
+        [Tooltip("Front cap color")]
+        [SerializeField] private Color faceColor = Color.white;
+
+        [Tooltip("Last band color (before back cap)")]
+        [SerializeField] private Color lastBandColor = new Color(1f, 0.5f, 0f, 1f);
+
+        [Tooltip("Back cap color")]
+        [SerializeField] private Color backColor = Color.gray;
 
         [Header("Advanced Simplification")]
         [Range(0f, 5f)]
@@ -752,71 +785,6 @@ namespace LanternPines.GlyphMesh3D.Core
         {
             return LoadPackageMaterial();
         }
-
-        /// <summary>
-        /// Configure shader properties for multi-band extrusion colors
-        /// </summary>
-        private void ConfigureShaderProperties()
-        {
-            if (meshRenderer == null) return;
-
-            var materials = meshRenderer.sharedMaterials;
-            if (materials == null || materials.Length == 0) return;
-
-            // Build slot map from current keyframe count
-            var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
-            int bandCount = slotMap.BandCount;
-
-            // Generate band colors (example: gradient from cyan to magenta)
-            Color[] bandColors = GenerateBandColors(bandCount);
-
-            // Apply shader properties to all materials
-            foreach (var mat in materials)
-            {
-                if (mat == null) continue;
-
-                // Set basic quadrant colors
-                if (mat.HasProperty("_FaceColor"))
-                    mat.SetColor("_FaceColor", Color.white);
-
-                if (mat.HasProperty("_LastBandColor"))
-                    mat.SetColor("_LastBandColor", new Color(1f, 0.5f, 0f, 1f)); // Orange for final band
-
-                if (mat.HasProperty("_BackColor"))
-                    mat.SetColor("_BackColor", Color.gray);
-
-                // Set band count
-                if (mat.HasProperty("_BandCount"))
-                    mat.SetInt("_BandCount", bandCount);
-
-                // Set band color array
-                if (mat.HasProperty("_BandColors") && bandColors.Length > 0)
-                {
-                    mat.SetColorArray("_BandColors", bandColors);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Generate colors for each extrusion band
-        /// Override this method to customize band coloring
-        /// </summary>
-        private Color[] GenerateBandColors(int bandCount)
-        {
-            if (bandCount == 0)
-                return new Color[0];
-
-            Color[] colors = new Color[Mathf.Max(bandCount, 1)];
-
-            // Generate gradient colors from cyan to magenta
-            for (int i = 0; i < colors.Length; i++)
-            {
-                float t = bandCount > 1 ? (float)i / (bandCount - 1) : 0.5f;
-                colors[i] = Color.Lerp(Color.cyan, Color.magenta, t);
-            }
-
-            return colors;
-        }
     }
 
 #if UNITY_EDITOR
@@ -914,4 +882,106 @@ namespace LanternPines.GlyphMesh3D.Core
         }
     }
 #endif
+
+        /// <summary>
+        /// Configure shader properties for multi-band extrusion colors
+        /// </summary>
+        private void ConfigureShaderProperties()
+        {
+            if (meshRenderer == null) return;
+
+            var materials = meshRenderer.sharedMaterials;
+            if (materials == null || materials.Length == 0) return;
+
+            // Build slot map from current keyframe count
+            var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
+            int bandCount = slotMap.BandCount;
+
+            // Generate band colors (example: gradient from cyan to magenta)
+            Color[] bandColors = GenerateBandColors(bandCount);
+
+            // Apply shader properties to all materials
+            foreach (var mat in materials)
+            {
+                if (mat == null) continue;
+
+                // Set basic quadrant colors (use inspector values)
+                if (mat.HasProperty("_FaceColor"))
+                    mat.SetColor("_FaceColor", faceColor);
+
+                if (mat.HasProperty("_LastBandColor"))
+                    mat.SetColor("_LastBandColor", lastBandColor);
+
+                if (mat.HasProperty("_BackColor"))
+                    mat.SetColor("_BackColor", backColor);
+
+                // Set band count
+                if (mat.HasProperty("_BandCount"))
+                    mat.SetInt("_BandCount", bandCount);
+
+                // Set band color array
+                if (mat.HasProperty("_BandColors") && bandColors.Length > 0)
+                {
+                    mat.SetColorArray("_BandColors", bandColors);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Generate colors for each extrusion band based on the selected color mode
+        /// </summary>
+        private Color[] GenerateBandColors(int bandCount)
+        {
+            if (bandCount == 0)
+                return new Color[0];
+
+            Color[] colors = new Color[Mathf.Max(bandCount, 1)];
+
+            switch (bandColorMode)
+            {
+                case BandColorMode.Gradient:
+                    // Interpolate between start and end colors
+                    for (int i = 0; i < colors.Length; i++)
+                    {
+                        float t = bandCount > 1 ? (float)i / (bandCount - 1) : 0.5f;
+                        colors[i] = Color.Lerp(gradientStart, gradientEnd, t);
+                    }
+                    break;
+
+                case BandColorMode.Rainbow:
+                    // Full HSV rainbow spectrum
+                    for (int i = 0; i < colors.Length; i++)
+                    {
+                        float hue = (float)i / bandCount;
+                        colors[i] = Color.HSVToRGB(hue, 1f, 1f);
+                    }
+                    break;
+
+                case BandColorMode.Custom:
+                    // Use custom color array, repeat if necessary
+                    for (int i = 0; i < colors.Length; i++)
+                    {
+                        if (customBandColors != null && customBandColors.Length > 0)
+                        {
+                            colors[i] = customBandColors[i % customBandColors.Length];
+                        }
+                        else
+                        {
+                            colors[i] = Color.white; // Fallback
+                        }
+                    }
+                    break;
+
+                case BandColorMode.SingleColor:
+                    // All bands use the same color (gradientStart)
+                    for (int i = 0; i < colors.Length; i++)
+                    {
+                        colors[i] = gradientStart;
+                    }
+                    break;
+            }
+
+            return colors;
+        }
+    }
 }
