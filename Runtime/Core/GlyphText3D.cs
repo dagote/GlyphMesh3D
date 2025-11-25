@@ -141,13 +141,30 @@ namespace LanternPines.GlyphMesh3D.Core
                 {
                     Debug.Log($"GlyphText3D: Created mesh with {combinedMesh.vertexCount} vertices, {combinedMesh.subMeshCount} submeshes");
 
-                    ClearMesh();
+                    // Clear old mesh if exists, but DON'T destroy it yet
+                    if (meshFilter.sharedMesh != null)
+                    {
+                        if (Application.isPlaying)
+                            Destroy(meshFilter.sharedMesh);
+                        else
+                            DestroyImmediate(meshFilter.sharedMesh);
+                    }
+
+                    // Assign new mesh
                     meshFilter.sharedMesh = combinedMesh;
+
+                    // Verify assignment worked
+                    if (meshFilter.sharedMesh == null)
+                    {
+                        Debug.LogError("GlyphText3D: Mesh assignment FAILED! MeshFilter.sharedMesh is NULL after assignment!");
+                    }
+                    else
+                    {
+                        Debug.Log($"GlyphText3D: Mesh assigned successfully. MeshFilter.sharedMesh = {meshFilter.sharedMesh.name}, vertices = {meshFilter.sharedMesh.vertexCount}");
+                    }
 
                     // Update materials if available
                     UpdateMaterials();
-
-                    Debug.Log($"GlyphText3D: Mesh assigned successfully. MeshFilter.sharedMesh = {meshFilter.sharedMesh?.name}");
                 }
                 else
                 {
