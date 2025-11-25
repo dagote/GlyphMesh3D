@@ -110,18 +110,28 @@ namespace LanternPines.GlyphMesh3D.Core
             if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
 
             // Validation
-            if (asset == null || string.IsNullOrEmpty(text))
+            if (asset == null)
             {
+                Debug.LogWarning("GlyphText3D: No asset assigned.");
+                ClearMesh();
+                return;
+            }
+
+            if (string.IsNullOrEmpty(text))
+            {
+                Debug.Log("GlyphText3D: Text is empty.");
                 ClearMesh();
                 return;
             }
 
             if (asset.glyphMeshes == null || asset.glyphMeshes.Length == 0)
             {
-                Debug.LogWarning("GlyphText3D: Asset has no glyph data. Please regenerate the asset.");
+                Debug.LogWarning($"GlyphText3D: Asset '{asset.name}' has no glyph data. Please regenerate the asset using the GlyphText3DGenerator.");
                 ClearMesh();
                 return;
             }
+
+            Debug.Log($"GlyphText3D: Building mesh for text '{text}' using asset '{asset.name}' with {asset.glyphMeshes.Length} glyphs");
 
             // Build combined mesh from individual glyphs
             try
@@ -129,14 +139,19 @@ namespace LanternPines.GlyphMesh3D.Core
                 var combinedMesh = BuildCombinedMesh();
                 if (combinedMesh != null)
                 {
+                    Debug.Log($"GlyphText3D: Created mesh with {combinedMesh.vertexCount} vertices, {combinedMesh.subMeshCount} submeshes");
+
                     ClearMesh();
                     meshFilter.sharedMesh = combinedMesh;
 
                     // Update materials if available
                     UpdateMaterials();
+
+                    Debug.Log($"GlyphText3D: Mesh assigned successfully. MeshFilter.sharedMesh = {meshFilter.sharedMesh?.name}");
                 }
                 else
                 {
+                    Debug.LogWarning("GlyphText3D: BuildCombinedMesh returned null - no vertices were generated");
                     ClearMesh();
                 }
             }
@@ -160,6 +175,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
             float currentXOffset = 0f;
             int maxSubmeshCount = 0;
+            int processedGlyphs = 0;
 
             // Process each character in the text
             foreach (char c in text)
@@ -169,9 +185,11 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 if (glyphData == null)
                 {
-                    Debug.LogWarning($"GlyphText3D: Character '{c}' not found in asset. Skipping.");
+                    Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
                     continue;
                 }
+
+                processedGlyphs++;
 
                 // Track maximum submesh count
                 if (glyphData.submeshCount > maxSubmeshCount)
@@ -233,8 +251,11 @@ namespace LanternPines.GlyphMesh3D.Core
             // If no vertices were added, return null
             if (allVertices.Count == 0)
             {
+                Debug.LogWarning($"GlyphText3D: No vertices generated. Processed {processedGlyphs} glyphs from text '{text}'");
                 return null;
             }
+
+            Debug.Log($"GlyphText3D: Processed {processedGlyphs} glyphs, generated {allVertices.Count} vertices, {submeshTriangles.Count} submeshes");
 
             // Create the combined mesh
             var mesh = new Mesh();
