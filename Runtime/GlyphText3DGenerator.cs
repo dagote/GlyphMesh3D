@@ -448,6 +448,7 @@ namespace LanternPines.GlyphMesh3D.Core
                 var allVertices = new List<Vector3>();
                 var allNormals = new List<Vector3>();
                 var allUVs = new List<Vector2>();
+                var allColors = new List<Color>();
                 var submeshData = new Dictionary<Material, List<int>>();
 
                 // Build extrusion profile for mesh builder
@@ -467,7 +468,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 foreach (var group in groups)
                 {
-                    GenerateMeshFromBoundaries(group, meshSettings, allVertices, allNormals, allUVs, submeshData);
+                    GenerateMeshFromBoundaries(group, meshSettings, allVertices, allNormals, allUVs, allColors, submeshData);
                 }
 
                 if (allVertices.Count > 0 && submeshData.Count > 0)
@@ -475,6 +476,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     combinedMesh.vertices = allVertices.ToArray();
                     combinedMesh.normals = allNormals.ToArray();
                     combinedMesh.uv = allUVs.ToArray();
+                    combinedMesh.colors = allColors.ToArray();
 
                     // Use MaterialSlotMap as source of truth for structure
                     var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
@@ -519,7 +521,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void GenerateMeshFromBoundaries(List<List<Vector2>> boundaries,
             GlyphMeshBuilder.MeshBuildSettings settings,
-            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
+            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs, List<Color> allColors,
             Dictionary<Material, List<int>> submeshData)
         {
             if (boundaries == null || boundaries.Count == 0) return;
@@ -535,10 +537,12 @@ namespace LanternPines.GlyphMesh3D.Core
             var vertices = mesh.vertices;
             var normals = mesh.normals;
             var uvs = mesh.uv;
+            var colors = mesh.colors;
 
             allVertices.AddRange(vertices);
             allNormals.AddRange(normals);
             allUVs.AddRange(uvs);
+            allColors.AddRange(colors);
 
             // Extract triangles from each submesh
             for (int submeshIdx = 0; submeshIdx < mesh.subMeshCount; submeshIdx++)
