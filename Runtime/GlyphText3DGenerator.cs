@@ -430,12 +430,15 @@ namespace LanternPines.GlyphMesh3D.Core
                 allBoundaries.AddRange(boundaries);
 
                 // Calculate advance width for next character
+                // Convert from font units to atlas pixels using glyph.scale
                 if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                 {
                     var glyph = GetGlyph(glyphChar);
                     if (glyph != null)
                     {
-                        xOffset += glyph.metrics.horizontalAdvance + 5f;
+                        // horizontalAdvance is in font units, scale converts to atlas pixels
+                        float advanceInPixels = glyph.metrics.horizontalAdvance * glyph.scale;
+                        xOffset += advanceInPixels + 1f; // +1 for spacing
                     }
                 }
             }
@@ -624,6 +627,28 @@ namespace LanternPines.GlyphMesh3D.Core
             else
             {
                 asset.extrusionProfile = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+            }
+
+            // Populate character advances from the current text
+            // Store advance widths in atlas pixels for each character
+            asset.characterAdvances.Clear();
+            if (fontAsset != null && !string.IsNullOrEmpty(text))
+            {
+                foreach (char c in text)
+                {
+                    if (asset.characterAdvances.ContainsKey(c)) continue;
+
+                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                    {
+                        var glyph = GetGlyph(glyphChar);
+                        if (glyph != null)
+                        {
+                            // Store advance in atlas pixels (font units * scale)
+                            float advanceInPixels = glyph.metrics.horizontalAdvance * glyph.scale;
+                            asset.characterAdvances[c] = advanceInPixels;
+                        }
+                    }
+                }
             }
         }
 #endif
