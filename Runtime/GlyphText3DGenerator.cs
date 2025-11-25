@@ -175,6 +175,9 @@ namespace LanternPines.GlyphMesh3D.Core
         [Header("Text Settings")]
         [SerializeField] private TMP_FontAsset fontAsset;
         [SerializeField] private string text = "Sample Text";
+        [Range(1f, 500f)]
+        [Tooltip("Size of the generated text. Default 100 represents the current generation scale.")]
+        [SerializeField] private float textSize = 100f;
 
         [Header("Extrusion Settings")]
         [Range(0f, 100f)]
@@ -256,6 +259,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
             // Set default values
             glyphText.text = "Sample Text";
+            glyphText.textSize = 100f;
             glyphText.extrusionDepth = 20f;
             glyphText.simplifyArcLength = 1.5f;
             glyphText.cornerAngleThreshold = 80f;
@@ -435,7 +439,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     var glyph = GetGlyph(glyphChar);
                     if (glyph != null)
                     {
-                        xOffset += glyph.metrics.horizontalAdvance + 5f;
+                        xOffset += (glyph.metrics.horizontalAdvance + 5f) * (textSize / 100f);
                     }
                 }
             }
@@ -463,7 +467,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     UseXAtlasUV = useXAtlasUVUnwrapping,
                     UVPadding = uvPadding,
                     UVResolution = uvResolution,
-                    TexelsPerUnit = texelsPerUnit
+                    TexelsPerUnit = texelsPerUnit,
+                    TextSize = textSize
                 };
 
                 foreach (var group in groups)

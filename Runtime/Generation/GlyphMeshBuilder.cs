@@ -55,6 +55,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             public int UVPadding;
             public int UVResolution;
             public float TexelsPerUnit;
+            public float TextSize;
 
             public MeshBuildSettings()
             {
@@ -62,6 +63,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 UVPadding = 4;
                 UVResolution = 1024;
                 TexelsPerUnit = 1.0f;
+                TextSize = 100f;
             }
         }
 
@@ -128,7 +130,8 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             // Correct triangle winding orders to ensure outward-facing normals
-            CorrectTriangleWindingOrders(allVertices, submeshData, settings.ExtrusionProfile?.extrusionDepth ?? 0f);
+            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
+            CorrectTriangleWindingOrders(allVertices, submeshData, settings.ExtrusionProfile?.extrusionDepth ?? 0f, effectiveScale);
 
             // Re-assign corrected triangles to submeshes
             for (int slotIdx = 0; slotIdx < slotMap.TotalSlots; slotIdx++)
@@ -153,10 +156,10 @@ namespace LanternPines.GlyphMesh3D.Generation
         /// Corrects triangle winding orders to ensure consistent outward-facing normals
         /// Only applies to front and back caps - extrusion faces are already correctly oriented
         /// </summary>
-        private static void CorrectTriangleWindingOrders(List<Vector3> vertices, Dictionary<Material, List<int>> submeshData, float extrusionDepth)
+        private static void CorrectTriangleWindingOrders(List<Vector3> vertices, Dictionary<Material, List<int>> submeshData, float extrusionDepth, float effectiveScale)
         {
             float frontZ = 0f;
-            float backZ = extrusionDepth * SCALE_FACTOR;
+            float backZ = extrusionDepth * effectiveScale;
             float zTolerance = 0.001f;
 
             foreach (var kvp in submeshData)
@@ -306,6 +309,9 @@ namespace LanternPines.GlyphMesh3D.Generation
             var vertexMap = new Dictionary<long, int>();
             var tracker = new VertexNormalTracker();
 
+            // Calculate effective scale factor with text size
+            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
+
             // Only create front face vertices (no extrusion)
             foreach (var v in triangulation.SortedVertices)
             {
@@ -313,7 +319,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 if (!vertexMap.ContainsKey(id))
                 {
                     vertexMap[id] = vertices.Count;
-                    vertices.Add(new Vector3((float)v.X * SCALE_FACTOR, (float)v.Y * SCALE_FACTOR, 0f));
+                    vertices.Add(new Vector3((float)v.X * effectiveScale, (float)v.Y * effectiveScale, 0f));
                 }
             }
 
@@ -396,6 +402,9 @@ namespace LanternPines.GlyphMesh3D.Generation
             var localSubmeshData = new Dictionary<Material, List<int>>();
             var tracker = new VertexNormalTracker();
 
+            // Calculate effective scale factor with text size
+            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
+
             // Build extrusion layers
             var layers = GlyphExtrusionProcessor.BuildExtrusionLayers(settings.ExtrusionProfile);
             if (layers.Count == 0)
@@ -431,7 +440,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                         }
 
                         vertexMap[id] = vertices.Count;
-                        vertices.Add(new Vector3(offsetPos.x * SCALE_FACTOR, offsetPos.y * SCALE_FACTOR, layer.depth * SCALE_FACTOR));
+                        vertices.Add(new Vector3(offsetPos.x * effectiveScale, offsetPos.y * effectiveScale, layer.depth * effectiveScale));
                     }
                 }
 
@@ -546,7 +555,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 if (Mathf.Approximately(vertices[i].z, 0f))
                     meshNormals[i] = Vector3.forward;  // Front faces: +Z (toward camera)
-                else if (Mathf.Approximately(vertices[i].z, settings.ExtrusionProfile.extrusionDepth * SCALE_FACTOR))
+                else if (Mathf.Approximately(vertices[i].z, settings.ExtrusionProfile.extrusionDepth * effectiveScale))
                     meshNormals[i] = Vector3.back;     // Back faces: -Z (away from camera)
                 else
                     meshNormals[i] = Vector3.zero;     // Side faces: set later, do not modify
@@ -662,9 +671,9 @@ namespace LanternPines.GlyphMesh3D.Generation
                         }
 
                         long triNetId0 = GlyphExtrusionProcessor.FindTriNetIdForPosition(layerVertexMaps[layerIdx], vertices,
-                            offsetP0 * SCALE_FACTOR, layers[layerIdx].depth * SCALE_FACTOR, SCALE_FACTOR);
+                            offsetP0 * effectiveScale, layers[layerIdx].depth * effectiveScale, effectiveScale);
                         long triNetId1 = GlyphExtrusionProcessor.FindTriNetIdForPosition(layerVertexMaps[layerIdx], vertices,
-                            offsetP1 * SCALE_FACTOR, layers[layerIdx].depth * SCALE_FACTOR, SCALE_FACTOR);
+                            offsetP1 * effectiveScale, layers[layerIdx].depth * effectiveScale, effectiveScale);
 
                         // Safety check to prevent crashes from invalid vertex indices
                         // With improved tolerance in FindTriNetIdForPosition, this should rarely trigger
