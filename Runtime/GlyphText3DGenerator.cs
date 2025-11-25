@@ -179,7 +179,7 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Size of the generated text. Default 100 represents the current generation scale.")]
         [SerializeField] private float textSize = 100f;
         [Range(0f, 250f)]
-        [Tooltip("Gap between characters in font units. Scaled by text size.")]
+        [Tooltip("Gap between characters in world units. Added directly to each character's mesh width.")]
         [SerializeField] private float characterSpacing = 5f;
 
         [Header("Extrusion Settings")]
@@ -840,9 +840,10 @@ namespace LanternPines.GlyphMesh3D.Core
 
                     glyphMesh.RecalculateBounds();
 
-                    // Calculate advance width using mesh pixel width + spacing
-                    // Both need to be in the same scale (pixels * 0.01)
-                    float advanceWidth = charWidth + (characterSpacing * 0.01f);
+                    // Use the actual mesh bounds width + characterSpacing (in units)
+                    // The mesh width is already in the correct scale from the mesh generation
+                    float meshWidth = glyphMesh.bounds.size.x;
+                    float advanceWidth = meshWidth + characterSpacing;
 
                     // Get baseline offset from font metrics
                     float baselineOffset = 0f;
@@ -855,7 +856,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing * 0.01f:F2}, advanceWidth={advanceWidth:F2}");
+                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, spacing={characterSpacing:F2}, advanceWidth={advanceWidth:F2}");
 
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
@@ -878,16 +879,16 @@ namespace LanternPines.GlyphMesh3D.Core
                     glyphData.mesh = null;  // No mesh for space characters
                     glyphData.bounds = new Bounds(Vector3.zero, Vector3.zero);
 
-                    // Get advance width from font metrics (use same scaling as visible characters)
+                    // Get advance width from font metrics, scaled to match visible character meshes
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                     {
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            // Scale to match the pixel-based approach used for visible characters
-                            // Approximate: use a reasonable conversion factor
-                            float charWidth = glyph.metrics.width * 0.01f * (textSize / 100f);
-                            glyphData.advanceWidth = charWidth + (characterSpacing * 0.01f);
+                            // Use the glyph's width metric scaled by the same factor used in mesh generation
+                            // SCALE_FACTOR = 0.01f, textSize default = 100
+                            float meshWidth = glyph.metrics.width * 0.01f * (textSize / 100f);
+                            glyphData.advanceWidth = meshWidth + characterSpacing;
                             glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
                         }
                     }
