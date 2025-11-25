@@ -191,6 +191,8 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 processedGlyphs++;
 
+                Debug.Log($"  Glyph '{c}': vertices={glyphData.vertices?.Length ?? 0}, advanceWidth={glyphData.advanceWidth}, submeshCount={glyphData.submeshCount}");
+
                 // Track maximum submesh count
                 if (glyphData.submeshCount > maxSubmeshCount)
                 {
@@ -207,6 +209,8 @@ namespace LanternPines.GlyphMesh3D.Core
                 // Calculate offset for this glyph
                 int vertexOffset = allVertices.Count;
                 Vector3 positionOffset = new Vector3(currentXOffset, 0f, 0f);
+
+                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by {glyphData.advanceWidth}");
 
                 // Add vertices with position offset
                 foreach (var vert in glyphData.vertices)
