@@ -180,18 +180,12 @@ namespace LanternPines.GlyphMesh3D.Core
         }
 
         /// <summary>
-        /// Build a combined mesh from all glyphs in the text string.
+        /// Build a combined mesh from pre-generated glyph mesh assets.
         /// </summary>
         private Mesh BuildCombinedMesh()
         {
-            var allVertices = new List<Vector3>();
-            var allNormals = new List<Vector3>();
-            var allUVs = new List<Vector2>();
-            var allColors = new List<Color>();
-            var submeshTriangles = new List<List<int>>();
-
+            var combineInstances = new List<CombineInstance>();
             float currentXOffset = 0f;
-            int maxSubmeshCount = 0;
             int processedGlyphs = 0;
 
             // Process each character in the text
@@ -208,99 +202,43 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 processedGlyphs++;
 
-                Debug.Log($"  Glyph '{c}': vertices={glyphData.vertices?.Length ?? 0}, advanceWidth={glyphData.advanceWidth}, submeshCount={glyphData.submeshCount}");
-
-                // Track maximum submesh count
-                if (glyphData.submeshCount > maxSubmeshCount)
+                // If this is an empty glyph (like space) or no mesh, just advance the position
+                if (glyphData.mesh == null)
                 {
-                    maxSubmeshCount = glyphData.submeshCount;
-                }
-
-                // If this is an empty glyph (like space), just advance the position
-                if (glyphData.vertices == null || glyphData.vertices.Length == 0)
-                {
+                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
                     currentXOffset += glyphData.advanceWidth;
                     continue;
                 }
 
-                // Calculate offset for this glyph
-                int vertexOffset = allVertices.Count;
-                Vector3 positionOffset = new Vector3(currentXOffset, 0f, 0f);
-
+                Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
                 Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by {glyphData.advanceWidth}");
 
-                // Add vertices with position offset
-                foreach (var vert in glyphData.vertices)
-                {
-                    allVertices.Add(vert + positionOffset);
-                }
-
-                // Add normals
-                allNormals.AddRange(glyphData.normals);
-
-                // Add UVs
-                allUVs.AddRange(glyphData.uvs);
-
-                // Add colors
-                if (glyphData.colors != null && glyphData.colors.Length > 0)
-                {
-                    allColors.AddRange(glyphData.colors);
-                }
-
-                // Initialize submesh lists if needed
-                while (submeshTriangles.Count < glyphData.submeshCount)
-                {
-                    submeshTriangles.Add(new List<int>());
-                }
-
-                // Add triangles for each submesh, offsetting indices
-                for (int subIdx = 0; subIdx < glyphData.submeshCount; subIdx++)
-                {
-                    if (glyphData.submeshTriangles[subIdx] != null)
-                    {
-                        foreach (var tri in glyphData.submeshTriangles[subIdx])
-                        {
-                            submeshTriangles[subIdx].Add(tri + vertexOffset);
-                        }
-                    }
-                }
+                // Create a combine instance for this glyph
+                CombineInstance ci = new CombineInstance();
+                ci.mesh = glyphData.mesh;
+                ci.transform = Matrix4x4.Translate(new Vector3(currentXOffset, 0f, 0f));
+                combineInstances.Add(ci);
 
                 // Advance position for next character
                 currentXOffset += glyphData.advanceWidth;
             }
 
-            // If no vertices were added, return null
-            if (allVertices.Count == 0)
+            // If no meshes were added, return null
+            if (combineInstances.Count == 0)
             {
-                Debug.LogWarning($"GlyphText3D: No vertices generated. Processed {processedGlyphs} glyphs from text '{text}'");
+                Debug.LogWarning($"GlyphText3D: No meshes found. Processed {processedGlyphs} glyphs from text '{text}'");
                 return null;
             }
 
-            Debug.Log($"GlyphText3D: Processed {processedGlyphs} glyphs, generated {allVertices.Count} vertices, {submeshTriangles.Count} submeshes");
+            Debug.Log($"GlyphText3D: Combining {combineInstances.Count} glyph meshes");
 
-            // Create the combined mesh
+            // Create the combined mesh using Unity's built-in CombineMeshes
             var mesh = new Mesh();
             mesh.name = "GlyphText3D_Combined";
-
-            mesh.vertices = allVertices.ToArray();
-            mesh.normals = allNormals.ToArray();
-            mesh.uv = allUVs.ToArray();
-
-            if (allColors.Count > 0)
-            {
-                mesh.colors = allColors.ToArray();
-            }
-
-            // Set submeshes
-            mesh.subMeshCount = submeshTriangles.Count;
-            for (int i = 0; i < submeshTriangles.Count; i++)
-            {
-                mesh.SetTriangles(submeshTriangles[i].ToArray(), i);
-            }
-
+            mesh.CombineMeshes(combineInstances.ToArray(), true, true);
             mesh.RecalculateBounds();
 
-            Debug.Log($"GlyphText3D: Mesh bounds = {mesh.bounds} (center: {mesh.bounds.center}, size: {mesh.bounds.size})");
+            Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, bounds = {mesh.bounds}");
 
             return mesh;
         }

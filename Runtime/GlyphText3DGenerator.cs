@@ -801,10 +801,9 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    // Create GlyphMeshData
-                    var glyphData = new GlyphMeshData();
-                    glyphData.character = c;
-                    glyphData.xOffset = 0f;  // Always 0 for individual glyphs
+                    // Create Unity Mesh asset for this glyph
+                    var glyphMesh = new Mesh();
+                    glyphMesh.name = $"Glyph_{c}_{(int)c}";
 
                     // Normalize vertices to start at x=0 (subtract minX for consistent positioning)
                     var normalizedVertices = new Vector3[allVertices.Count];
@@ -816,51 +815,57 @@ namespace LanternPines.GlyphMesh3D.Core
                             allVertices[v].z
                         );
                     }
-                    glyphData.vertices = normalizedVertices;
 
-                    // Store bounds in normalized space
-                    glyphData.bounds = new Bounds(
-                        new Vector3(charWidth / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
-                        new Vector3(charWidth, charHeight, extrusionDepth)
-                    );
+                    glyphMesh.vertices = normalizedVertices;
+                    glyphMesh.normals = allNormals.ToArray();
+                    glyphMesh.uv = allUVs.ToArray();
+                    glyphMesh.colors = allColors.ToArray();
 
-                    // Calculate advance width based on actual mesh width + spacing
-                    glyphData.advanceWidth = charWidth + characterSpacing * (textSize / 100f);
-
-                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing}, textSize={textSize}, advanceWidth={glyphData.advanceWidth:F2}");
-
-                    // Get baseline offset from font metrics
-                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
-                    {
-                        var glyph = GetGlyph(glyphChar);
-                        if (glyph != null)
-                        {
-                            glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
-                        }
-                    }
-
-                    // Store mesh data
-                    glyphData.normals = allNormals.ToArray();
-                    glyphData.uvs = allUVs.ToArray();
-                    glyphData.colors = allColors.ToArray();
-
-                    // Store submesh data in slot order
+                    // Set up submeshes
                     var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
-                    glyphData.submeshCount = slotMap.TotalSlots;
-                    glyphData.submeshTriangles = new int[slotMap.TotalSlots][];
+                    glyphMesh.subMeshCount = slotMap.TotalSlots;
 
                     for (int slotIdx = 0; slotIdx < slotMap.TotalSlots; slotIdx++)
                     {
                         Material slotMat = slotIdx < meshSettings.Materials.Length ? meshSettings.Materials[slotIdx] : null;
                         if (slotMat != null && submeshData.ContainsKey(slotMat))
                         {
-                            glyphData.submeshTriangles[slotIdx] = submeshData[slotMat].ToArray();
+                            glyphMesh.SetTriangles(submeshData[slotMat].ToArray(), slotIdx);
                         }
                         else
                         {
-                            glyphData.submeshTriangles[slotIdx] = new int[0];
+                            glyphMesh.SetTriangles(new int[0], slotIdx);
                         }
                     }
+
+                    glyphMesh.RecalculateBounds();
+
+                    // Calculate advance width based on actual mesh width + spacing
+                    float advanceWidth = charWidth + characterSpacing * (textSize / 100f);
+
+                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing}, textSize={textSize}, advanceWidth={advanceWidth:F2}");
+
+                    // Get baseline offset from font metrics
+                    float baselineOffset = 0f;
+                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                    {
+                        var glyph = GetGlyph(glyphChar);
+                        if (glyph != null)
+                        {
+                            baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
+                        }
+                    }
+
+                    // Create GlyphMeshData
+                    var glyphData = new GlyphMeshData();
+                    glyphData.character = c;
+                    glyphData.mesh = glyphMesh;
+                    glyphData.advanceWidth = advanceWidth;
+                    glyphData.baselineOffset = baselineOffset;
+                    glyphData.bounds = new Bounds(
+                        new Vector3(charWidth / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
+                        new Vector3(charWidth, charHeight, extrusionDepth)
+                    );
 
                     glyphDataList.Add(glyphData);
                 }
@@ -869,14 +874,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Handle characters with no boundaries (e.g., space)
                     var glyphData = new GlyphMeshData();
                     glyphData.character = c;
-                    glyphData.xOffset = 0f;
+                    glyphData.mesh = null;  // No mesh for space characters
                     glyphData.bounds = new Bounds(Vector3.zero, Vector3.zero);
-                    glyphData.vertices = new Vector3[0];
-                    glyphData.normals = new Vector3[0];
-                    glyphData.uvs = new Vector2[0];
-                    glyphData.colors = new Color[0];
-                    glyphData.submeshTriangles = new int[0][];
-                    glyphData.submeshCount = 0;
 
                     // Get advance width from font metrics
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
@@ -1108,11 +1107,25 @@ namespace LanternPines.GlyphMesh3D.Core
             // Create new asset
             GlyphText3DAsset asset = ScriptableObject.CreateInstance<GlyphText3DAsset>();
 
-            // Populate with current generator settings
+            // Populate with current generator settings (this creates the meshes)
             generator.PopulateAsset(asset);
 
-            // Save asset to disk
+            // Save main asset to disk FIRST
             AssetDatabase.CreateAsset(asset, path);
+
+            // Now add each mesh as a sub-asset
+            if (asset.glyphMeshes != null)
+            {
+                foreach (var glyphData in asset.glyphMeshes)
+                {
+                    if (glyphData.mesh != null)
+                    {
+                        AssetDatabase.AddObjectToAsset(glyphData.mesh, asset);
+                    }
+                }
+            }
+
+            // Save all assets
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
@@ -1120,7 +1133,7 @@ namespace LanternPines.GlyphMesh3D.Core
             EditorGUIUtility.PingObject(asset);
             Selection.activeObject = asset;
 
-            Debug.Log($"Generated GlyphText3DAsset at: {path}");
+            Debug.Log($"Generated GlyphText3DAsset with {asset.glyphMeshes?.Length ?? 0} glyphs at: {path}");
         }
     }
 #endif

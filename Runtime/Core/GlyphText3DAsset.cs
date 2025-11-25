@@ -72,7 +72,7 @@ namespace LanternPines.GlyphMesh3D.Core
     }
 
     /// <summary>
-    /// Stores all mesh data and metadata for a single character glyph.
+    /// Stores mesh asset and metadata for a single character glyph.
     /// </summary>
     [Serializable]
     public class GlyphMeshData
@@ -90,26 +90,8 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Bounding box of the glyph")]
         public Bounds bounds;
 
-        [Tooltip("X offset used during generation (for positioning)")]
-        public float xOffset;
-
-        [Header("Mesh Data")]
-        [Tooltip("Vertex positions")]
-        public Vector3[] vertices;
-
-        [Tooltip("Vertex normals")]
-        public Vector3[] normals;
-
-        [Tooltip("Vertex UVs")]
-        public Vector2[] uvs;
-
-        [Tooltip("Vertex colors (if any)")]
-        public Color[] colors;
-
-        [Tooltip("Submesh triangle indices - one array per material slot")]
-        public int[][] submeshTriangles;
-
-        [Tooltip("Number of material slots (submeshes)")]
-        public int submeshCount;
+        [Header("Mesh Asset")]
+        [Tooltip("The Unity Mesh asset for this glyph")]
+        public Mesh mesh;
     }
 }
