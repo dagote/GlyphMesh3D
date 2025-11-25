@@ -696,7 +696,6 @@ namespace LanternPines.GlyphMesh3D.Core
             allChars.Sort();
 
             var glyphDataList = new List<GlyphMeshData>();
-            float xOffset = 0f;
 
             // Prepare extraction settings
             var extractionSettings = new GlyphContourExtractor.ContourExtractionSettings(
@@ -734,8 +733,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     $"Processing character '{c}' ({i + 1}/{allChars.Count})",
                     progress);
 
-                // Extract contours for this character
-                var boundaries = GlyphContourExtractor.ExtractContours(fontAsset, c, extractionSettings, xOffset);
+                // Extract contours for this character at xOffset = 0 (local space)
+                var boundaries = GlyphContourExtractor.ExtractContours(fontAsset, c, extractionSettings, 0f);
 
                 if (boundaries.Count > 0)
                 {
@@ -805,20 +804,21 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
                     glyphData.character = c;
-                    glyphData.xOffset = minX;  // Store where this character's left edge is
+                    glyphData.xOffset = 0f;  // Always 0 for individual glyphs
 
-                    // Convert vertices to local space (subtract minX to make them start at x=0)
-                    var localVertices = new Vector3[allVertices.Count];
+                    // Normalize vertices to start at x=0 (subtract minX for consistent positioning)
+                    var normalizedVertices = new Vector3[allVertices.Count];
                     for (int v = 0; v < allVertices.Count; v++)
                     {
-                        localVertices[v] = new Vector3(
-                            allVertices[v].x - minX,  // Convert to local X
+                        normalizedVertices[v] = new Vector3(
+                            allVertices[v].x - minX,
                             allVertices[v].y,
                             allVertices[v].z
                         );
                     }
+                    glyphData.vertices = normalizedVertices;
 
-                    // Store bounds in local space
+                    // Store bounds in normalized space
                     glyphData.bounds = new Bounds(
                         new Vector3(charWidth / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
                         new Vector3(charWidth, charHeight, extrusionDepth)
@@ -837,8 +837,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    // Store mesh data (vertices in local space)
-                    glyphData.vertices = localVertices;
+                    // Store mesh data
                     glyphData.normals = allNormals.ToArray();
                     glyphData.uvs = allUVs.ToArray();
                     glyphData.colors = allColors.ToArray();
@@ -862,16 +861,13 @@ namespace LanternPines.GlyphMesh3D.Core
                     }
 
                     glyphDataList.Add(glyphData);
-
-                    // Update xOffset for next character
-                    xOffset = maxX + characterSpacing * (textSize / 100f);
                 }
                 else
                 {
                     // Handle characters with no boundaries (e.g., space)
                     var glyphData = new GlyphMeshData();
                     glyphData.character = c;
-                    glyphData.xOffset = xOffset;
+                    glyphData.xOffset = 0f;
                     glyphData.bounds = new Bounds(Vector3.zero, Vector3.zero);
                     glyphData.vertices = new Vector3[0];
                     glyphData.normals = new Vector3[0];
@@ -888,7 +884,6 @@ namespace LanternPines.GlyphMesh3D.Core
                         {
                             glyphData.advanceWidth = (glyph.metrics.horizontalAdvance + characterSpacing) * (textSize / 100f);
                             glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
-                            xOffset += glyphData.advanceWidth;
                         }
                     }
 
