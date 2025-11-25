@@ -72,11 +72,30 @@ namespace LanternPines.GlyphMesh3D.Core
             RegenerateMeshFromAsset();
         }
 
+        private void Update()
+        {
+            // In edit mode, continuously check for text changes
+            // OnValidate isn't always called for every character typed in TextArea
+            #if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                if (text != previousText || asset != previousAsset)
+                {
+                    Debug.Log($"GlyphText3D.Update: Text changed from '{previousText}' to '{text}'");
+                    RegenerateMeshFromAsset();
+                    previousText = text;
+                    previousAsset = asset;
+                }
+            }
+            #endif
+        }
+
         private void OnValidate()
         {
             // Detect changes and regenerate
             if (text != previousText || asset != previousAsset)
             {
+                Debug.Log($"GlyphText3D.OnValidate: Text changed from '{previousText}' to '{text}'");
                 RegenerateMeshFromAsset();
                 previousText = text;
                 previousAsset = asset;
