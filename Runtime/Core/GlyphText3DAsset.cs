@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -32,12 +34,75 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Extrusion profile curve used during generation")]
         public AnimationCurve extrusionProfile;
 
-        // TODO: Add per-glyph mesh data storage
-        // - Character to mesh mapping
-        // - Vertex/triangle data per glyph
-        // - Character metrics (advance widths, baselines, bounds)
+        [Tooltip("Text size used during generation")]
+        public float textSize;
 
-        // Placeholder for future implementation
-        // public GlyphMeshData[] glyphMeshes;
+        [Tooltip("Character spacing used during generation")]
+        public float characterSpacing;
+
+        [Tooltip("Whether XAtlas UV unwrapping was used")]
+        public bool useXAtlasUVUnwrapping;
+
+        [Header("Pre-Generated Glyph Data")]
+        [Tooltip("All generated glyphs from the source text")]
+        public GlyphMeshData[] glyphMeshes;
+
+        /// <summary>
+        /// Get glyph mesh data for a specific character.
+        /// </summary>
+        public GlyphMeshData GetGlyphData(char character)
+        {
+            if (glyphMeshes == null) return null;
+
+            foreach (var glyph in glyphMeshes)
+            {
+                if (glyph.character == character)
+                    return glyph;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Stores all mesh data and metadata for a single character glyph.
+    /// </summary>
+    [Serializable]
+    public class GlyphMeshData
+    {
+        [Header("Character Info")]
+        public char character;
+
+        [Header("Character Metrics")]
+        [Tooltip("Horizontal advance width for this character")]
+        public float advanceWidth;
+
+        [Tooltip("Baseline offset")]
+        public float baselineOffset;
+
+        [Tooltip("Bounding box of the glyph")]
+        public Bounds bounds;
+
+        [Tooltip("X offset used during generation (for positioning)")]
+        public float xOffset;
+
+        [Header("Mesh Data")]
+        [Tooltip("Vertex positions")]
+        public Vector3[] vertices;
+
+        [Tooltip("Vertex normals")]
+        public Vector3[] normals;
+
+        [Tooltip("Vertex UVs")]
+        public Vector2[] uvs;
+
+        [Tooltip("Vertex colors (if any)")]
+        public Color[] colors;
+
+        [Tooltip("Submesh triangle indices - one array per material slot")]
+        public int[][] submeshTriangles;
+
+        [Tooltip("Number of material slots (submeshes)")]
+        public int submeshCount;
     }
 }

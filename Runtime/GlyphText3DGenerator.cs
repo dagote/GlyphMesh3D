@@ -632,35 +632,258 @@ namespace LanternPines.GlyphMesh3D.Core
         {
             if (asset == null) return;
 
-            // Font reference
-            asset.fontAsset = fontAsset;
-
-            // Generation settings
-            asset.simplifyArcLength = simplifyArcLength;
-            asset.cornerAngleThreshold = cornerAngleThreshold;
-            asset.postDpEpsilon = postDpEpsilon;
-            asset.extrusionDepth = extrusionDepth;
-            asset.extrusionWidth = extrusionWidth;
-
-            // Copy extrusion profile curve
-            if (extrusionProfile != null)
+            try
             {
-                AnimationCurve curveCopy = new AnimationCurve();
-                if (extrusionProfile.KeyframeCount > 0)
+                // Font reference
+                asset.fontAsset = fontAsset;
+
+                // Generation settings
+                asset.simplifyArcLength = simplifyArcLength;
+                asset.cornerAngleThreshold = cornerAngleThreshold;
+                asset.postDpEpsilon = postDpEpsilon;
+                asset.extrusionDepth = extrusionDepth;
+                asset.extrusionWidth = extrusionWidth;
+                asset.textSize = textSize;
+                asset.characterSpacing = characterSpacing;
+                asset.useXAtlasUVUnwrapping = useXAtlasUVUnwrapping;
+
+                // Copy extrusion profile curve
+                if (extrusionProfile != null)
                 {
-                    for (int i = 0; i < extrusionProfile.KeyframeCount; i++)
+                    AnimationCurve curveCopy = new AnimationCurve();
+                    if (extrusionProfile.KeyframeCount > 0)
                     {
-                        float time = extrusionProfile.GetKeyframeTime(i);
-                        float value = extrusionProfile.GetOffset(time);
-                        curveCopy.AddKey(time, value);
+                        for (int i = 0; i < extrusionProfile.KeyframeCount; i++)
+                        {
+                            float time = extrusionProfile.GetKeyframeTime(i);
+                            float value = extrusionProfile.GetOffset(time);
+                            curveCopy.AddKey(time, value);
+                        }
                     }
+                    asset.extrusionProfile = curveCopy;
                 }
-                asset.extrusionProfile = curveCopy;
+                else
+                {
+                    asset.extrusionProfile = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+                }
+
+                // Generate and store per-character mesh data
+                GenerateGlyphMeshData(asset);
             }
-            else
+            finally
             {
-                asset.extrusionProfile = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+                // Always clear the progress bar
+                EditorUtility.ClearProgressBar();
             }
+        }
+
+        private void GenerateGlyphMeshData(GlyphText3DAsset asset)
+        {
+            if (string.IsNullOrEmpty(text) || fontAsset == null)
+            {
+                asset.glyphMeshes = new GlyphMeshData[0];
+                return;
+            }
+
+            // Get unique characters from the text (maintain order)
+            var uniqueChars = new List<char>();
+            foreach (char c in text)
+            {
+                if (!uniqueChars.Contains(c))
+                {
+                    uniqueChars.Add(c);
+                }
+            }
+
+            var glyphDataList = new List<GlyphMeshData>();
+            float xOffset = 0f;
+
+            // Prepare extraction settings
+            var extractionSettings = new GlyphContourExtractor.ContourExtractionSettings(
+                simplifyArcLength, cornerAngleThreshold, postDpEpsilon);
+
+            // Build extrusion profile
+            var profile = new GlyphExtrusionProcessor.ExtrusionProfile(
+                extrusionDepth, extrusionWidth, extrusionProfile.GetCurve());
+
+            // Build mesh settings
+            var meshSettings = new GlyphMeshBuilder.MeshBuildSettings
+            {
+                ExtrusionProfile = profile,
+                Materials = meshRenderer.sharedMaterials,
+                UseXAtlasUV = useXAtlasUVUnwrapping,
+                UVPadding = uvPadding,
+                UVResolution = uvResolution,
+                TexelsPerUnit = texelsPerUnit,
+                TextSize = textSize
+            };
+
+            // Generate mesh for each unique character
+            for (int i = 0; i < uniqueChars.Count; i++)
+            {
+                char c = uniqueChars[i];
+
+                // Update progress bar
+                float progress = (float)i / uniqueChars.Count;
+                EditorUtility.DisplayProgressBar(
+                    "Generating Glyph Asset",
+                    $"Processing character '{c}' ({i + 1}/{uniqueChars.Count})",
+                    progress);
+
+                // Extract contours for this character
+                var boundaries = GlyphContourExtractor.ExtractContours(fontAsset, c, extractionSettings, xOffset);
+
+                if (boundaries.Count > 0)
+                {
+                    // Calculate character bounds
+                    float minX = float.MaxValue;
+                    float maxX = float.MinValue;
+                    float minY = float.MaxValue;
+                    float maxY = float.MinValue;
+
+                    foreach (var boundary in boundaries)
+                    {
+                        foreach (var point in boundary)
+                        {
+                            minX = Mathf.Min(minX, point.x);
+                            maxX = Mathf.Max(maxX, point.x);
+                            minY = Mathf.Min(minY, point.y);
+                            maxY = Mathf.Max(maxY, point.y);
+                        }
+                    }
+
+                    float charWidth = maxX - minX;
+                    float charHeight = maxY - minY;
+
+                    // Group boundaries and generate mesh
+                    var groups = GlyphTriangulator.GroupBoundariesByOuter(boundaries);
+
+                    // For now, generate one mesh per character (combine all groups)
+                    var allVertices = new List<Vector3>();
+                    var allNormals = new List<Vector3>();
+                    var allUVs = new List<Vector2>();
+                    var allColors = new List<Color>();
+                    var submeshData = new Dictionary<Material, List<int>>();
+
+                    foreach (var group in groups)
+                    {
+                        int vertexOffset = allVertices.Count;
+                        var mesh = GlyphMeshBuilder.BuildMesh(group, meshSettings);
+
+                        if (mesh != null)
+                        {
+                            allVertices.AddRange(mesh.vertices);
+                            allNormals.AddRange(mesh.normals);
+                            allUVs.AddRange(mesh.uv);
+                            allColors.AddRange(mesh.colors);
+
+                            // Extract submesh data
+                            for (int subIdx = 0; subIdx < mesh.subMeshCount; subIdx++)
+                            {
+                                Material mat = subIdx < meshSettings.Materials.Length ? meshSettings.Materials[subIdx] : null;
+                                if (mat != null)
+                                {
+                                    if (!submeshData.ContainsKey(mat))
+                                    {
+                                        submeshData[mat] = new List<int>();
+                                    }
+
+                                    var tris = mesh.GetTriangles(subIdx);
+                                    foreach (var tri in tris)
+                                    {
+                                        submeshData[mat].Add(tri + vertexOffset);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Create GlyphMeshData
+                    var glyphData = new GlyphMeshData();
+                    glyphData.character = c;
+                    glyphData.xOffset = xOffset;
+                    glyphData.bounds = new Bounds(
+                        new Vector3((minX + maxX) / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
+                        new Vector3(charWidth, charHeight, extrusionDepth)
+                    );
+
+                    // Get advance width from font metrics
+                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                    {
+                        var glyph = GetGlyph(glyphChar);
+                        if (glyph != null)
+                        {
+                            glyphData.advanceWidth = glyph.metrics.horizontalAdvance * (textSize / 100f);
+                            glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
+                        }
+                    }
+
+                    // Store mesh data
+                    glyphData.vertices = allVertices.ToArray();
+                    glyphData.normals = allNormals.ToArray();
+                    glyphData.uvs = allUVs.ToArray();
+                    glyphData.colors = allColors.ToArray();
+
+                    // Store submesh data in slot order
+                    var slotMap = new MaterialSlotMap(extrusionProfile != null ? extrusionProfile.KeyframeCount : 1);
+                    glyphData.submeshCount = slotMap.TotalSlots;
+                    glyphData.submeshTriangles = new int[slotMap.TotalSlots][];
+
+                    for (int slotIdx = 0; slotIdx < slotMap.TotalSlots; slotIdx++)
+                    {
+                        Material slotMat = slotIdx < meshSettings.Materials.Length ? meshSettings.Materials[slotIdx] : null;
+                        if (slotMat != null && submeshData.ContainsKey(slotMat))
+                        {
+                            glyphData.submeshTriangles[slotIdx] = submeshData[slotMat].ToArray();
+                        }
+                        else
+                        {
+                            glyphData.submeshTriangles[slotIdx] = new int[0];
+                        }
+                    }
+
+                    glyphDataList.Add(glyphData);
+
+                    // Update xOffset for next character
+                    xOffset = maxX + characterSpacing * (textSize / 100f);
+                }
+                else
+                {
+                    // Handle characters with no boundaries (e.g., space)
+                    var glyphData = new GlyphMeshData();
+                    glyphData.character = c;
+                    glyphData.xOffset = xOffset;
+                    glyphData.bounds = new Bounds(Vector3.zero, Vector3.zero);
+                    glyphData.vertices = new Vector3[0];
+                    glyphData.normals = new Vector3[0];
+                    glyphData.uvs = new Vector2[0];
+                    glyphData.colors = new Color[0];
+                    glyphData.submeshTriangles = new int[0][];
+                    glyphData.submeshCount = 0;
+
+                    // Get advance width from font metrics
+                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                    {
+                        var glyph = GetGlyph(glyphChar);
+                        if (glyph != null)
+                        {
+                            glyphData.advanceWidth = (glyph.metrics.horizontalAdvance + characterSpacing) * (textSize / 100f);
+                            glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
+                            xOffset += glyphData.advanceWidth;
+                        }
+                    }
+
+                    glyphDataList.Add(glyphData);
+                }
+            }
+
+            asset.glyphMeshes = glyphDataList.ToArray();
+
+            // Final progress update
+            EditorUtility.DisplayProgressBar(
+                "Generating Glyph Asset",
+                "Complete!",
+                1f);
         }
 #endif
 

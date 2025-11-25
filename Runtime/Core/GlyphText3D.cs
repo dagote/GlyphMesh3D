@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -8,7 +9,7 @@ namespace LanternPines.GlyphMesh3D.Core
 {
     /// <summary>
     /// Runtime component that instantiates and positions 3D glyph meshes from a GlyphText3DAsset.
-    /// This is a stub implementation - full mesh instantiation logic will be added later.
+    /// Lightweight implementation designed for easy extension.
     /// </summary>
     [ExecuteInEditMode]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -19,17 +20,17 @@ namespace LanternPines.GlyphMesh3D.Core
         public GlyphText3DAsset asset;
 
         [Header("Text Content")]
-        [SerializeField]
+        [TextArea(3, 10)]
         [Tooltip("The text to display using the asset's glyphs")]
-        private string text = "Sample";
+        public string text = "Sample";
 
-        // TODO: Implement runtime mesh instantiation from asset
-        // Features to add:
-        // - Load glyph meshes from asset
-        // - Position glyphs based on advance widths and baselines from asset metadata
-        // - Build combined mesh for text string
-        // - Support dynamic text updates
-        // - Handle material assignment from asset
+        // Cached components
+        private MeshFilter meshFilter;
+        private MeshRenderer meshRenderer;
+
+        // Track previous state for change detection
+        private string previousText;
+        private GlyphText3DAsset previousAsset;
 
 #if UNITY_EDITOR
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
@@ -61,28 +62,250 @@ namespace LanternPines.GlyphMesh3D.Core
         }
 #endif
 
+        private void OnEnable()
+        {
+            meshFilter = GetComponent<MeshFilter>();
+            meshRenderer = GetComponent<MeshRenderer>();
+            RegenerateMeshFromAsset();
+        }
+
         private void OnValidate()
         {
-            // TODO: Regenerate mesh when text or asset changes
-            if (asset != null)
+            // Detect changes and regenerate
+            if (text != previousText || asset != previousAsset)
             {
-                // Placeholder for future implementation
-                // RegenerateMeshFromAsset();
+                RegenerateMeshFromAsset();
+                previousText = text;
+                previousAsset = asset;
             }
         }
 
-        private void Awake()
+        /// <summary>
+        /// Public API to update the displayed text.
+        /// </summary>
+        public void SetText(string newText)
         {
-            // TODO: Initialize components and generate initial mesh
+            if (text != newText)
+            {
+                text = newText;
+                RegenerateMeshFromAsset();
+            }
         }
 
-        // private void RegenerateMeshFromAsset()
-        // {
-        //     // TODO: Implementation
-        //     // 1. Read glyph data from asset for each character in 'text'
-        //     // 2. Calculate glyph positions using advance widths
-        //     // 3. Combine meshes into single mesh
-        //     // 4. Apply to MeshFilter
-        // }
+        /// <summary>
+        /// Public API to force mesh regeneration.
+        /// </summary>
+        public void Rebuild()
+        {
+            RegenerateMeshFromAsset();
+        }
+
+        /// <summary>
+        /// Main method: builds mesh from asset glyphs based on current text.
+        /// </summary>
+        private void RegenerateMeshFromAsset()
+        {
+            // Ensure components are cached
+            if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
+            if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
+
+            // Validation
+            if (asset == null || string.IsNullOrEmpty(text))
+            {
+                ClearMesh();
+                return;
+            }
+
+            if (asset.glyphMeshes == null || asset.glyphMeshes.Length == 0)
+            {
+                Debug.LogWarning("GlyphText3D: Asset has no glyph data. Please regenerate the asset.");
+                ClearMesh();
+                return;
+            }
+
+            // Build combined mesh from individual glyphs
+            try
+            {
+                var combinedMesh = BuildCombinedMesh();
+                if (combinedMesh != null)
+                {
+                    ClearMesh();
+                    meshFilter.sharedMesh = combinedMesh;
+
+                    // Update materials if available
+                    UpdateMaterials();
+                }
+                else
+                {
+                    ClearMesh();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"GlyphText3D: Failed to generate mesh - {ex.Message}\n{ex.StackTrace}");
+                ClearMesh();
+            }
+        }
+
+        /// <summary>
+        /// Build a combined mesh from all glyphs in the text string.
+        /// </summary>
+        private Mesh BuildCombinedMesh()
+        {
+            var allVertices = new List<Vector3>();
+            var allNormals = new List<Vector3>();
+            var allUVs = new List<Vector2>();
+            var allColors = new List<Color>();
+            var submeshTriangles = new List<List<int>>();
+
+            float currentXOffset = 0f;
+            int maxSubmeshCount = 0;
+
+            // Process each character in the text
+            foreach (char c in text)
+            {
+                // Get glyph data for this character
+                GlyphMeshData glyphData = asset.GetGlyphData(c);
+
+                if (glyphData == null)
+                {
+                    Debug.LogWarning($"GlyphText3D: Character '{c}' not found in asset. Skipping.");
+                    continue;
+                }
+
+                // Track maximum submesh count
+                if (glyphData.submeshCount > maxSubmeshCount)
+                {
+                    maxSubmeshCount = glyphData.submeshCount;
+                }
+
+                // If this is an empty glyph (like space), just advance the position
+                if (glyphData.vertices == null || glyphData.vertices.Length == 0)
+                {
+                    currentXOffset += glyphData.advanceWidth;
+                    continue;
+                }
+
+                // Calculate offset for this glyph
+                int vertexOffset = allVertices.Count;
+                Vector3 positionOffset = new Vector3(currentXOffset, 0f, 0f);
+
+                // Add vertices with position offset
+                foreach (var vert in glyphData.vertices)
+                {
+                    allVertices.Add(vert + positionOffset);
+                }
+
+                // Add normals
+                allNormals.AddRange(glyphData.normals);
+
+                // Add UVs
+                allUVs.AddRange(glyphData.uvs);
+
+                // Add colors
+                if (glyphData.colors != null && glyphData.colors.Length > 0)
+                {
+                    allColors.AddRange(glyphData.colors);
+                }
+
+                // Initialize submesh lists if needed
+                while (submeshTriangles.Count < glyphData.submeshCount)
+                {
+                    submeshTriangles.Add(new List<int>());
+                }
+
+                // Add triangles for each submesh, offsetting indices
+                for (int subIdx = 0; subIdx < glyphData.submeshCount; subIdx++)
+                {
+                    if (glyphData.submeshTriangles[subIdx] != null)
+                    {
+                        foreach (var tri in glyphData.submeshTriangles[subIdx])
+                        {
+                            submeshTriangles[subIdx].Add(tri + vertexOffset);
+                        }
+                    }
+                }
+
+                // Advance position for next character
+                currentXOffset += glyphData.advanceWidth;
+            }
+
+            // If no vertices were added, return null
+            if (allVertices.Count == 0)
+            {
+                return null;
+            }
+
+            // Create the combined mesh
+            var mesh = new Mesh();
+            mesh.name = "GlyphText3D_Combined";
+
+            mesh.vertices = allVertices.ToArray();
+            mesh.normals = allNormals.ToArray();
+            mesh.uv = allUVs.ToArray();
+
+            if (allColors.Count > 0)
+            {
+                mesh.colors = allColors.ToArray();
+            }
+
+            // Set submeshes
+            mesh.subMeshCount = submeshTriangles.Count;
+            for (int i = 0; i < submeshTriangles.Count; i++)
+            {
+                mesh.SetTriangles(submeshTriangles[i].ToArray(), i);
+            }
+
+            mesh.RecalculateBounds();
+
+            return mesh;
+        }
+
+        /// <summary>
+        /// Update materials from the asset or maintain existing.
+        /// </summary>
+        private void UpdateMaterials()
+        {
+            if (meshRenderer == null) return;
+
+            // For now, keep existing materials or create default ones
+            // Future enhancement: Store materials in the asset
+            var materials = meshRenderer.sharedMaterials;
+
+            if (materials == null || materials.Length == 0)
+            {
+                // Create a default material
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                    shader = Shader.Find("Standard");
+
+                if (shader != null)
+                {
+                    Material defaultMat = new Material(shader);
+                    meshRenderer.sharedMaterial = defaultMat;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clear the current mesh.
+        /// </summary>
+        private void ClearMesh()
+        {
+            if (meshFilter != null && meshFilter.sharedMesh != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(meshFilter.sharedMesh);
+                else
+                    DestroyImmediate(meshFilter.sharedMesh);
+
+                meshFilter.sharedMesh = null;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            ClearMesh();
+        }
     }
 }
