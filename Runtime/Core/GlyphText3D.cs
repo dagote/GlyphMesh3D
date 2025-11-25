@@ -176,16 +176,14 @@ namespace LanternPines.GlyphMesh3D.Core
         /// </summary>
         private void InstantiateIndividualGlyphs()
         {
-            // Clear any existing instantiated glyphs
-            ClearInstantiatedGlyphs();
-
+            // Incremental update: only add/remove glyphs that changed
+            int targetGlyphCount = 0;
             float currentXOffset = 0f;
-            int glyphCount = 0;
 
-            // Process each character in the text
-            foreach (char c in text)
+            // First pass: count how many glyphs we need and update positions
+            for (int i = 0; i < text.Length; i++)
             {
-                // Get glyph data for this character
+                char c = text[i];
                 GlyphMeshData glyphData = asset.GetGlyphData(c);
 
                 if (glyphData == null)
@@ -194,47 +192,84 @@ namespace LanternPines.GlyphMesh3D.Core
                     continue;
                 }
 
-                // If this is an empty glyph (like space) or no mesh, just advance the position
+                // Check if we already have this glyph at this position
+                if (targetGlyphCount < instantiatedGlyphs.Count)
+                {
+                    GameObject existingGlyph = instantiatedGlyphs[targetGlyphCount];
+
+                    // Update existing glyph
+                    if (glyphData.mesh != null)
+                    {
+                        existingGlyph.name = $"Glyph_{c}";
+                        existingGlyph.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
+
+                        MeshFilter glyphMeshFilter = existingGlyph.GetComponent<MeshFilter>();
+                        if (glyphMeshFilter.sharedMesh != glyphData.mesh)
+                        {
+                            glyphMeshFilter.sharedMesh = glyphData.mesh;
+                        }
+
+                        targetGlyphCount++;
+                        Debug.Log($"  Updated glyph '{c}' at position ({currentXOffset}, 0, 0)");
+                    }
+                }
+                else
+                {
+                    // Create new glyph
+                    if (glyphData.mesh != null)
+                    {
+                        Debug.Log($"  Creating new glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, 0, 0)");
+
+                        GameObject glyphObject = new GameObject($"Glyph_{c}");
+                        glyphObject.transform.SetParent(transform, false);
+                        glyphObject.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
+
+                        MeshFilter glyphMeshFilter = glyphObject.AddComponent<MeshFilter>();
+                        MeshRenderer glyphMeshRenderer = glyphObject.AddComponent<MeshRenderer>();
+
+                        glyphMeshFilter.sharedMesh = glyphData.mesh;
+
+                        // Copy materials from asset
+                        if (asset.materials != null && asset.materials.Length > 0)
+                        {
+                            glyphMeshRenderer.sharedMaterials = asset.materials;
+                        }
+                        else if (meshRenderer != null && meshRenderer.sharedMaterial != null)
+                        {
+                            glyphMeshRenderer.sharedMaterial = meshRenderer.sharedMaterial;
+                        }
+
+                        instantiatedGlyphs.Add(glyphObject);
+                        targetGlyphCount++;
+                    }
+                }
+
+                // Advance position
                 if (glyphData.mesh == null)
                 {
                     Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
-                    currentXOffset += glyphData.advanceWidth;
-                    continue;
                 }
-
-                Debug.Log($"  Instantiating glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, 0, 0)");
-
-                // Create a child GameObject for this glyph
-                GameObject glyphObject = new GameObject($"Glyph_{c}");
-                glyphObject.transform.SetParent(transform, false);
-                glyphObject.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
-
-                // Add MeshFilter and MeshRenderer
-                MeshFilter glyphMeshFilter = glyphObject.AddComponent<MeshFilter>();
-                MeshRenderer glyphMeshRenderer = glyphObject.AddComponent<MeshRenderer>();
-
-                // Assign the mesh
-                glyphMeshFilter.sharedMesh = glyphData.mesh;
-
-                // Copy materials from asset
-                if (asset.materials != null && asset.materials.Length > 0)
-                {
-                    glyphMeshRenderer.sharedMaterials = asset.materials;
-                }
-                else if (meshRenderer != null && meshRenderer.sharedMaterial != null)
-                {
-                    glyphMeshRenderer.sharedMaterial = meshRenderer.sharedMaterial;
-                }
-
-                // Track this instantiated glyph
-                instantiatedGlyphs.Add(glyphObject);
-                glyphCount++;
-
-                // Advance position for next character
                 currentXOffset += glyphData.advanceWidth;
             }
 
-            Debug.Log($"GlyphText3D: Successfully instantiated {glyphCount} character GameObjects");
+            // Remove excess glyphs if text got shorter
+            while (instantiatedGlyphs.Count > targetGlyphCount)
+            {
+                int lastIndex = instantiatedGlyphs.Count - 1;
+                GameObject toRemove = instantiatedGlyphs[lastIndex];
+                instantiatedGlyphs.RemoveAt(lastIndex);
+
+                if (toRemove != null)
+                {
+                    Debug.Log($"  Removing excess glyph at index {lastIndex}");
+                    if (Application.isPlaying)
+                        Destroy(toRemove);
+                    else
+                        DestroyImmediate(toRemove);
+                }
+            }
+
+            Debug.Log($"GlyphText3D: Incremental update complete - {targetGlyphCount} character GameObjects");
         }
 
         /// <summary>

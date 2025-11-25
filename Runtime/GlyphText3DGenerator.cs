@@ -840,10 +840,9 @@ namespace LanternPines.GlyphMesh3D.Core
 
                     glyphMesh.RecalculateBounds();
 
-                    // Calculate advance width based on actual mesh width + spacing
-                    float advanceWidth = charWidth + characterSpacing * (textSize / 100f);
-
-                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing}, textSize={textSize}, advanceWidth={advanceWidth:F2}");
+                    // Calculate advance width using mesh pixel width + spacing
+                    // Both need to be in the same scale (pixels * 0.01)
+                    float advanceWidth = charWidth + (characterSpacing * 0.01f);
 
                     // Get baseline offset from font metrics
                     float baselineOffset = 0f;
@@ -855,6 +854,8 @@ namespace LanternPines.GlyphMesh3D.Core
                             baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
                         }
                     }
+
+                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing * 0.01f:F2}, advanceWidth={advanceWidth:F2}");
 
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
@@ -877,13 +878,16 @@ namespace LanternPines.GlyphMesh3D.Core
                     glyphData.mesh = null;  // No mesh for space characters
                     glyphData.bounds = new Bounds(Vector3.zero, Vector3.zero);
 
-                    // Get advance width from font metrics
+                    // Get advance width from font metrics (use same scaling as visible characters)
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                     {
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            glyphData.advanceWidth = (glyph.metrics.horizontalAdvance + characterSpacing) * (textSize / 100f);
+                            // Scale to match the pixel-based approach used for visible characters
+                            // Approximate: use a reasonable conversion factor
+                            float charWidth = glyph.metrics.width * 0.01f * (textSize / 100f);
+                            glyphData.advanceWidth = charWidth + (characterSpacing * 0.01f);
                             glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
                         }
                     }
