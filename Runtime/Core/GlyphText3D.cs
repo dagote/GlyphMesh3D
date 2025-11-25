@@ -32,6 +32,9 @@ namespace LanternPines.GlyphMesh3D.Core
         private string previousText;
         private GlyphText3DAsset previousAsset;
 
+        // Track instantiated character GameObjects
+        private List<GameObject> instantiatedGlyphs = new List<GameObject>();
+
 #if UNITY_EDITOR
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
         private static void CreateGlyphText3DObject()
@@ -114,6 +117,7 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 Debug.LogWarning("GlyphText3D: No asset assigned.");
                 ClearMesh();
+                ClearInstantiatedGlyphs();
                 return;
             }
 
@@ -121,6 +125,7 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 Debug.Log("GlyphText3D: Text is empty.");
                 ClearMesh();
+                ClearInstantiatedGlyphs();
                 return;
             }
 
@@ -128,55 +133,89 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 Debug.LogWarning($"GlyphText3D: Asset '{asset.name}' has no glyph data. Please regenerate the asset using the GlyphText3DGenerator.");
                 ClearMesh();
+                ClearInstantiatedGlyphs();
                 return;
             }
 
-            Debug.Log($"GlyphText3D: Building mesh for text '{text}' using asset '{asset.name}' with {asset.glyphMeshes.Length} glyphs");
+            Debug.Log($"GlyphText3D: Building text '{text}' using asset '{asset.name}' with {asset.glyphMeshes.Length} glyphs");
 
-            // Build combined mesh from individual glyphs
+            // TEMPORARY: Instantiate individual GameObjects for each character instead of combining meshes
             try
             {
-                var combinedMesh = BuildCombinedMesh();
-                if (combinedMesh != null)
-                {
-                    Debug.Log($"GlyphText3D: Created mesh with {combinedMesh.vertexCount} vertices, {combinedMesh.subMeshCount} submeshes");
-
-                    // Clear old mesh if exists, but DON'T destroy it yet
-                    if (meshFilter.sharedMesh != null)
-                    {
-                        if (Application.isPlaying)
-                            Destroy(meshFilter.sharedMesh);
-                        else
-                            DestroyImmediate(meshFilter.sharedMesh);
-                    }
-
-                    // Assign new mesh
-                    meshFilter.sharedMesh = combinedMesh;
-
-                    // Verify assignment worked
-                    if (meshFilter.sharedMesh == null)
-                    {
-                        Debug.LogError("GlyphText3D: Mesh assignment FAILED! MeshFilter.sharedMesh is NULL after assignment!");
-                    }
-                    else
-                    {
-                        Debug.Log($"GlyphText3D: Mesh assigned successfully. MeshFilter.sharedMesh = {meshFilter.sharedMesh.name}, vertices = {meshFilter.sharedMesh.vertexCount}");
-                    }
-
-                    // Update materials if available
-                    UpdateMaterials();
-                }
-                else
-                {
-                    Debug.LogWarning("GlyphText3D: BuildCombinedMesh returned null - no vertices were generated");
-                    ClearMesh();
-                }
+                InstantiateIndividualGlyphs();
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"GlyphText3D: Failed to generate mesh - {ex.Message}\n{ex.StackTrace}");
-                ClearMesh();
+                Debug.LogError($"GlyphText3D: Failed to instantiate glyphs - {ex.Message}\n{ex.StackTrace}");
+                ClearInstantiatedGlyphs();
             }
+        }
+
+        /// <summary>
+        /// TEMPORARY: Instantiate each glyph as a separate child GameObject for testing.
+        /// This bypasses the mesh combining logic to isolate the issue.
+        /// </summary>
+        private void InstantiateIndividualGlyphs()
+        {
+            // Clear any existing instantiated glyphs
+            ClearInstantiatedGlyphs();
+
+            float currentXOffset = 0f;
+            int glyphCount = 0;
+
+            // Process each character in the text
+            foreach (char c in text)
+            {
+                // Get glyph data for this character
+                GlyphMeshData glyphData = asset.GetGlyphData(c);
+
+                if (glyphData == null)
+                {
+                    Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
+                    continue;
+                }
+
+                // If this is an empty glyph (like space) or no mesh, just advance the position
+                if (glyphData.mesh == null)
+                {
+                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
+                    currentXOffset += glyphData.advanceWidth;
+                    continue;
+                }
+
+                Debug.Log($"  Instantiating glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, 0, 0)");
+
+                // Create a child GameObject for this glyph
+                GameObject glyphObject = new GameObject($"Glyph_{c}");
+                glyphObject.transform.SetParent(transform, false);
+                glyphObject.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
+
+                // Add MeshFilter and MeshRenderer
+                MeshFilter glyphMeshFilter = glyphObject.AddComponent<MeshFilter>();
+                MeshRenderer glyphMeshRenderer = glyphObject.AddComponent<MeshRenderer>();
+
+                // Assign the mesh
+                glyphMeshFilter.sharedMesh = glyphData.mesh;
+
+                // Copy materials from asset
+                if (asset.materials != null && asset.materials.Length > 0)
+                {
+                    glyphMeshRenderer.sharedMaterials = asset.materials;
+                }
+                else if (meshRenderer != null && meshRenderer.sharedMaterial != null)
+                {
+                    glyphMeshRenderer.sharedMaterial = meshRenderer.sharedMaterial;
+                }
+
+                // Track this instantiated glyph
+                instantiatedGlyphs.Add(glyphObject);
+                glyphCount++;
+
+                // Advance position for next character
+                currentXOffset += glyphData.advanceWidth;
+            }
+
+            Debug.Log($"GlyphText3D: Successfully instantiated {glyphCount} character GameObjects");
         }
 
         /// <summary>
@@ -360,6 +399,24 @@ namespace LanternPines.GlyphMesh3D.Core
         }
 
         /// <summary>
+        /// Clear instantiated glyph GameObjects.
+        /// </summary>
+        private void ClearInstantiatedGlyphs()
+        {
+            foreach (var glyphObject in instantiatedGlyphs)
+            {
+                if (glyphObject != null)
+                {
+                    if (Application.isPlaying)
+                        Destroy(glyphObject);
+                    else
+                        DestroyImmediate(glyphObject);
+                }
+            }
+            instantiatedGlyphs.Clear();
+        }
+
+        /// <summary>
         /// Clear the current mesh.
         /// </summary>
         private void ClearMesh()
@@ -378,6 +435,7 @@ namespace LanternPines.GlyphMesh3D.Core
         private void OnDestroy()
         {
             ClearMesh();
+            ClearInstantiatedGlyphs();
         }
     }
 }
