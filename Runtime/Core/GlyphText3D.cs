@@ -252,9 +252,11 @@ namespace LanternPines.GlyphMesh3D.Core
             }
 
             // Combine all glyphs
-            foreach (var (glyphData, position) in glyphsToRender)
+            foreach (var glyph in glyphsToRender)
             {
                 int vertexOffset = allVertices.Count;
+                var glyphData = glyph.data;
+                var position = glyph.position;
                 var glyphMesh = glyphData.mesh;
 
                 // Add vertices (transformed by position)
