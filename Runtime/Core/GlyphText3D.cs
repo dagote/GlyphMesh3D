@@ -283,6 +283,8 @@ namespace LanternPines.GlyphMesh3D.Core
 
             mesh.RecalculateBounds();
 
+            Debug.Log($"GlyphText3D: Mesh bounds = {mesh.bounds} (center: {mesh.bounds.center}, size: {mesh.bounds.size})");
+
             return mesh;
         }
 
