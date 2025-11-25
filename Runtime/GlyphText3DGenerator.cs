@@ -178,7 +178,7 @@ namespace LanternPines.GlyphMesh3D.Core
         [Range(1f, 500f)]
         [Tooltip("Size of the generated text. Default 100 represents the current generation scale.")]
         [SerializeField] private float textSize = 100f;
-        [Range(0f, 50f)]
+        [Range(0f, 250f)]
         [Tooltip("Gap between characters in font units. Scaled by text size.")]
         [SerializeField] private float characterSpacing = 5f;
 
