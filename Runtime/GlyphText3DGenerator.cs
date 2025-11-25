@@ -178,6 +178,9 @@ namespace LanternPines.GlyphMesh3D.Core
         [Range(1f, 500f)]
         [Tooltip("Size of the generated text. Default 100 represents the current generation scale.")]
         [SerializeField] private float textSize = 100f;
+        [Range(0f, 50f)]
+        [Tooltip("Gap between characters in font units. Scaled by text size.")]
+        [SerializeField] private float characterSpacing = 5f;
 
         [Header("Extrusion Settings")]
         [Range(0f, 100f)]
@@ -260,6 +263,7 @@ namespace LanternPines.GlyphMesh3D.Core
             // Set default values
             glyphText.text = "Sample Text";
             glyphText.textSize = 100f;
+            glyphText.characterSpacing = 5f;
             glyphText.extrusionDepth = 20f;
             glyphText.simplifyArcLength = 1.5f;
             glyphText.cornerAngleThreshold = 80f;
@@ -454,8 +458,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     float charWidth = maxX - minX;
 
                     // Add character width plus spacing, scaled by textSize
-                    // Use a small gap (5 units base) between characters
-                    xOffset = maxX + 5f * (textSize / 100f);
+                    xOffset = maxX + characterSpacing * (textSize / 100f);
                 }
                 else
                 {
@@ -465,7 +468,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            xOffset += (glyph.metrics.horizontalAdvance + 5f) * (textSize / 100f);
+                            xOffset += (glyph.metrics.horizontalAdvance + characterSpacing) * (textSize / 100f);
                         }
                     }
                 }
