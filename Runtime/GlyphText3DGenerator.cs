@@ -827,6 +827,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Calculate advance width based on actual mesh width + spacing
                     glyphData.advanceWidth = charWidth + characterSpacing * (textSize / 100f);
 
+                    Debug.Log($"Generator: Glyph '{c}' - minX={minX:F2}, maxX={maxX:F2}, charWidth={charWidth:F2}, spacing={characterSpacing}, textSize={textSize}, advanceWidth={glyphData.advanceWidth:F2}");
+
                     // Get baseline offset from font metrics
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                     {
