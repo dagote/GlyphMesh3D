@@ -184,9 +184,11 @@ namespace LanternPines.GlyphMesh3D.Core
         /// </summary>
         private Mesh BuildCombinedMesh()
         {
-            var combineInstances = new List<CombineInstance>();
             float currentXOffset = 0f;
             int processedGlyphs = 0;
+
+            // Collect glyph data and positions for all valid characters
+            var glyphsToRender = new List<(GlyphMeshData data, Vector3 position)>();
 
             // Process each character in the text
             foreach (char c in text)
@@ -213,32 +215,106 @@ namespace LanternPines.GlyphMesh3D.Core
                 Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
                 Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by {glyphData.advanceWidth}");
 
-                // Create a combine instance for this glyph
-                CombineInstance ci = new CombineInstance();
-                ci.mesh = glyphData.mesh;
-                ci.transform = Matrix4x4.Translate(new Vector3(currentXOffset, 0f, 0f));
-                combineInstances.Add(ci);
+                // Store this glyph and its position
+                glyphsToRender.Add((glyphData, new Vector3(currentXOffset, 0f, 0f)));
 
                 // Advance position for next character
                 currentXOffset += glyphData.advanceWidth;
             }
 
             // If no meshes were added, return null
-            if (combineInstances.Count == 0)
+            if (glyphsToRender.Count == 0)
             {
                 Debug.LogWarning($"GlyphText3D: No meshes found. Processed {processedGlyphs} glyphs from text '{text}'");
                 return null;
             }
 
-            Debug.Log($"GlyphText3D: Combining {combineInstances.Count} glyph meshes");
+            Debug.Log($"GlyphText3D: Combining {glyphsToRender.Count} glyph meshes");
 
-            // Create the combined mesh using Unity's built-in CombineMeshes
+            // Determine the number of submeshes from the first glyph
+            int submeshCount = glyphsToRender[0].data.mesh.subMeshCount;
+            Debug.Log($"GlyphText3D: Expected submesh count = {submeshCount}");
+
+            // Create the combined mesh
             var mesh = new Mesh();
             mesh.name = "GlyphText3D_Combined";
-            mesh.CombineMeshes(combineInstances.ToArray(), true, true);
+
+            // Combine meshes per-submesh to preserve material slots
+            var allVertices = new List<Vector3>();
+            var allNormals = new List<Vector3>();
+            var allUVs = new List<Vector2>();
+            var allColors = new List<Color>();
+            var submeshTriangles = new List<int>[submeshCount];
+
+            for (int i = 0; i < submeshCount; i++)
+            {
+                submeshTriangles[i] = new List<int>();
+            }
+
+            // Combine all glyphs
+            foreach (var (glyphData, position) in glyphsToRender)
+            {
+                int vertexOffset = allVertices.Count;
+                var glyphMesh = glyphData.data.mesh;
+
+                // Add vertices (transformed by position)
+                var vertices = glyphMesh.vertices;
+                for (int i = 0; i < vertices.Length; i++)
+                {
+                    allVertices.Add(vertices[i] + position);
+                }
+
+                // Add normals
+                if (glyphMesh.normals != null && glyphMesh.normals.Length > 0)
+                {
+                    allNormals.AddRange(glyphMesh.normals);
+                }
+
+                // Add UVs
+                if (glyphMesh.uv != null && glyphMesh.uv.Length > 0)
+                {
+                    allUVs.AddRange(glyphMesh.uv);
+                }
+
+                // Add colors
+                if (glyphMesh.colors != null && glyphMesh.colors.Length > 0)
+                {
+                    allColors.AddRange(glyphMesh.colors);
+                }
+
+                // Add triangles for each submesh
+                for (int subIdx = 0; subIdx < submeshCount && subIdx < glyphMesh.subMeshCount; subIdx++)
+                {
+                    var triangles = glyphMesh.GetTriangles(subIdx);
+                    foreach (var tri in triangles)
+                    {
+                        submeshTriangles[subIdx].Add(tri + vertexOffset);
+                    }
+                }
+            }
+
+            // Assign to mesh
+            mesh.vertices = allVertices.ToArray();
+
+            if (allNormals.Count == allVertices.Count)
+                mesh.normals = allNormals.ToArray();
+
+            if (allUVs.Count == allVertices.Count)
+                mesh.uv = allUVs.ToArray();
+
+            if (allColors.Count == allVertices.Count)
+                mesh.colors = allColors.ToArray();
+
+            // Set submeshes
+            mesh.subMeshCount = submeshCount;
+            for (int i = 0; i < submeshCount; i++)
+            {
+                mesh.SetTriangles(submeshTriangles[i].ToArray(), i);
+            }
+
             mesh.RecalculateBounds();
 
-            Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, bounds = {mesh.bounds}");
+            Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, {mesh.subMeshCount} submeshes, bounds = {mesh.bounds}");
 
             return mesh;
         }
