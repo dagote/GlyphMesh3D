@@ -80,6 +80,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             var allVertices = new List<Vector3>();
             var allNormals = new List<Vector3>();
             var allUVs = new List<Vector2>();
+            var allColors = new List<Color>();
             var submeshData = new Dictionary<Material, List<int>>();
 
             // Determine if we use curved extrusion
@@ -91,11 +92,11 @@ namespace LanternPines.GlyphMesh3D.Generation
 
             if (useCurvedExtrusion)
             {
-                GenerateCurvedMesh(boundaries, settings, allVertices, allNormals, allUVs, submeshData);
+                GenerateCurvedMesh(boundaries, settings, allVertices, allNormals, allUVs, allColors, submeshData);
             }
             else
             {
-                GenerateStraightMesh(boundaries, settings, allVertices, allNormals, allUVs, submeshData);
+                GenerateStraightMesh(boundaries, settings, allVertices, allNormals, allUVs, allColors, submeshData);
             }
 
             if (allVertices.Count == 0 || submeshData.Count == 0)
@@ -105,6 +106,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             combinedMesh.vertices = allVertices.ToArray();
             combinedMesh.normals = allNormals.ToArray();
             combinedMesh.uv = allUVs.ToArray();
+            combinedMesh.colors = allColors.ToArray();
 
             // Build submeshes based on material slot map
             var slotMap = new MaterialSlotMap(settings.ExtrusionProfile != null ? settings.ExtrusionProfile.KeyframeCount : 1);
@@ -291,7 +293,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         private static void GenerateStraightMesh(List<List<Vector2>> boundaries, MeshBuildSettings settings,
-            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
+            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs, List<Color> allColors,
             Dictionary<Material, List<int>> submeshData)
         {
             var triangulation = GlyphTriangulator.Triangulate(boundaries);
@@ -354,9 +356,17 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Simple planar UV projection
             var meshUVs = GeneratePlanarUVs(vertices, true);
 
+            // Assign vertex colors (color index 0 = front face)
+            var meshColors = new Color[vertices.Count];
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                meshColors[i] = new Color(0f, 0f, 0f, 1f); // R=0 -> front color
+            }
+
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
             allUVs.AddRange(meshUVs);
+            allColors.AddRange(meshColors);
 
             // Add triangles to face material (slot 0)
             var materials = settings.Materials ?? new Material[0];
@@ -374,7 +384,7 @@ namespace LanternPines.GlyphMesh3D.Generation
         }
 
         private static void GenerateCurvedMesh(List<List<Vector2>> boundaries, MeshBuildSettings settings,
-            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs,
+            List<Vector3> allVertices, List<Vector3> allNormals, List<Vector2> allUVs, List<Color> allColors,
             Dictionary<Material, List<int>> submeshData)
         {
             var triangulation = GlyphTriangulator.Triangulate(boundaries);
@@ -545,8 +555,59 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Initialize UVs for all vertices
             var meshUVs = new List<Vector2>(new Vector2[vertices.Count]);
 
+            // Initialize vertex colors for all vertices
+            var meshColors = new List<Color>(new Color[vertices.Count]);
+
             // Generate face UVs for layer vertices (q1 for front, q4 for back)
             GenerateFaceUVs(vertices, layerVertexMaps, meshUVs, settings.UVResolution);
+
+            // Assign vertex colors for layer vertices
+            // Front layer: color index 0, Back layer: color index 1
+            int frontLayerIdx = 0;
+            int backLayerIdx = layerVertexMaps.Count - 1;
+
+            for (int layerIdx = 0; layerIdx < layerVertexMaps.Count; layerIdx++)
+            {
+                float colorIndex;
+                if (layerIdx == frontLayerIdx)
+                    colorIndex = 0f; // Front color
+                else if (layerIdx == backLayerIdx)
+                    colorIndex = 1f / 8f; // Back color (index 1)
+                else
+                    colorIndex = 0f; // Default to front for middle layers (will be overridden for side vertices)
+
+                foreach (int idx in layerVertexMaps[layerIdx].Values)
+                {
+                    meshColors[idx] = new Color(colorIndex, 0f, 0f, 1f);
+                }
+            }
+
+            // Assign vertex colors for side vertices (duplicates for extrusion bands)
+            for (int layerIdx = 0; layerIdx < layerSideVertexMaps.Count; layerIdx++)
+            {
+                // Side vertices get color based on their layer
+                float colorIndex;
+                if (layerIdx == frontLayerIdx)
+                    colorIndex = 0f; // Front color
+                else if (layerIdx == backLayerIdx)
+                    colorIndex = 1f / 8f; // Back color
+                else
+                    colorIndex = 0f; // Will be set properly when creating bands
+
+                foreach (int idx in layerSideVertexMaps[layerIdx].Values)
+                {
+                    meshColors[idx] = new Color(colorIndex, 0f, 0f, 1f);
+                }
+            }
+
+            // Assign colors for last band start vertices if they exist
+            if (lastBandStartMap != null)
+            {
+                foreach (int idx in lastBandStartMap.Values)
+                {
+                    meshColors[idx] = new Color(0f, 0f, 0f, 1f); // Will be set when creating the last band
+                }
+            }
 
             // Side faces with stepped UV unwrapping
             // Calculate total number of extrusion bands
@@ -620,10 +681,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Determine which quadrant this band should use
                         int bandQuadrant = GetBandQuadrant(layerIdx, totalBands);
 
+                        // Determine which color this band should use
+                        float bandColorIndex = GetBandColorIndex(layerIdx, totalBands);
+
                         // Debug: Log quadrant assignment
                         if (b == 0 && i == 0) // Only log once per band to avoid spam
                         {
-                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}, Layer depths: {layers[layerIdx].depth} -> {layers[layerIdx + 1].depth}");
+                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}, Color Index {(int)(bandColorIndex * 8)}, Layer depths: {layers[layerIdx].depth} -> {layers[layerIdx + 1].depth}");
                         }
 
                         // Map to full quadrant area
@@ -638,6 +702,12 @@ namespace LanternPines.GlyphMesh3D.Generation
                         meshUVs[curr1] = MapToQuadrant(uEnd, 0f, bandQuadrant, settings.UVResolution);
                         meshUVs[next0] = MapToQuadrant(uStart, 1f, bandQuadrant, settings.UVResolution);
                         meshUVs[next1] = MapToQuadrant(uEnd, 1f, bandQuadrant, settings.UVResolution);
+
+                        // Assign vertex colors for this band
+                        meshColors[curr0] = new Color(bandColorIndex, 0f, 0f, 1f);
+                        meshColors[curr1] = new Color(bandColorIndex, 0f, 0f, 1f);
+                        meshColors[next0] = new Color(bandColorIndex, 0f, 0f, 1f);
+                        meshColors[next1] = new Color(bandColorIndex, 0f, 0f, 1f);
 
                         int bandSlotIndex = slotMap.GetBandSlot(layerIdx);
                         Material layerMat = bandSlotIndex < materials.Length ? materials[bandSlotIndex] : faceMat;
@@ -694,6 +764,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             allVertices.AddRange(vertices);
             allNormals.AddRange(meshNormals);
             allUVs.AddRange(meshUVs);
+            allColors.AddRange(meshColors);
 
             foreach (var kvp in localSubmeshData)
             {
@@ -757,6 +828,24 @@ namespace LanternPines.GlyphMesh3D.Generation
             // Multiple bands: last uses q3 (final), all others use q2 (looping)
             if (bandIndex == totalBands - 1) return 3;
             return 2;
+        }
+
+        /// <summary>
+        /// Get the color index for a specific extrusion band
+        /// Color indices: 0=Front, 1=Back, 2-7=Extrusion 1-6, 8=Final
+        /// Pattern:
+        /// - Last band always uses index 8 (Final)
+        /// - Other bands use indices 2-7 (Extrusion 1-6), looping if more than 6 bands
+        /// </summary>
+        private static float GetBandColorIndex(int bandIndex, int totalBands)
+        {
+            // Last band uses final color (index 8)
+            if (bandIndex == totalBands - 1)
+                return 8f / 8f; // Index 8 encoded as 1.0
+
+            // Other bands use extrusion colors 1-6 (indices 2-7), looping
+            int extrusionColorIndex = (bandIndex % 6) + 2; // 2, 3, 4, 5, 6, 7, then loop
+            return extrusionColorIndex / 8f;
         }
 
         /// <summary>
