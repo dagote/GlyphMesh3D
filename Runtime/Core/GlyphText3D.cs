@@ -255,8 +255,8 @@ namespace LanternPines.GlyphMesh3D.Core
             foreach (var glyph in glyphsToRender)
             {
                 int vertexOffset = allVertices.Count;
-                var glyphData = glyph.data;
-                var position = glyph.position;
+                var glyphData = glyph.Item1;  // Use .Item1 instead of .data for tuple access
+                var position = glyph.Item2;    // Use .Item2 instead of .position for tuple access
                 var glyphMesh = glyphData.mesh;
 
                 // Add vertices (transformed by position)
