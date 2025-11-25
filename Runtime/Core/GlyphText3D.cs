@@ -232,7 +232,7 @@ namespace LanternPines.GlyphMesh3D.Core
             Debug.Log($"GlyphText3D: Combining {glyphsToRender.Count} glyph meshes");
 
             // Determine the number of submeshes from the first glyph
-            int submeshCount = glyphsToRender[0].data.mesh.subMeshCount;
+            int submeshCount = glyphsToRender[0].Item1.mesh.subMeshCount;
             Debug.Log($"GlyphText3D: Expected submesh count = {submeshCount}");
 
             // Create the combined mesh
@@ -255,7 +255,7 @@ namespace LanternPines.GlyphMesh3D.Core
             foreach (var (glyphData, position) in glyphsToRender)
             {
                 int vertexOffset = allVertices.Count;
-                var glyphMesh = glyphData.data.mesh;
+                var glyphMesh = glyphData.mesh;
 
                 // Add vertices (transformed by position)
                 var vertices = glyphMesh.vertices;
