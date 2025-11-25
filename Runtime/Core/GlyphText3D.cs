@@ -262,28 +262,40 @@ namespace LanternPines.GlyphMesh3D.Core
         }
 
         /// <summary>
-        /// Update materials from the asset or maintain existing.
+        /// Update materials from the asset or create default ones.
         /// </summary>
         private void UpdateMaterials()
         {
-            if (meshRenderer == null) return;
+            if (meshRenderer == null || asset == null) return;
 
-            // For now, keep existing materials or create default ones
-            // Future enhancement: Store materials in the asset
-            var materials = meshRenderer.sharedMaterials;
-
-            if (materials == null || materials.Length == 0)
+            // Use materials from the asset if available
+            if (asset.materials != null && asset.materials.Length > 0)
             {
-                // Create a default material
+                // Apply materials from asset
+                meshRenderer.sharedMaterials = asset.materials;
+            }
+            else
+            {
+                // No materials in asset - create default materials based on slot count
+                int slotCount = asset.materialSlotCount > 0 ? asset.materialSlotCount : 1;
+                var defaultMaterials = new Material[slotCount];
+
+                // Find appropriate shader
                 Shader shader = Shader.Find("Universal Render Pipeline/Lit");
                 if (shader == null)
                     shader = Shader.Find("Standard");
 
                 if (shader != null)
                 {
-                    Material defaultMat = new Material(shader);
-                    meshRenderer.sharedMaterial = defaultMat;
+                    // Create a default material for each slot
+                    for (int i = 0; i < slotCount; i++)
+                    {
+                        defaultMaterials[i] = new Material(shader);
+                        defaultMaterials[i].name = $"GlyphMaterial_Slot{i}";
+                    }
                 }
+
+                meshRenderer.sharedMaterials = defaultMaterials;
             }
         }
 

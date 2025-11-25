@@ -43,6 +43,13 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Whether XAtlas UV unwrapping was used")]
         public bool useXAtlasUVUnwrapping;
 
+        [Header("Materials")]
+        [Tooltip("Materials used during generation (one per material slot)")]
+        public Material[] materials;
+
+        [Tooltip("Number of material slots used during generation")]
+        public int materialSlotCount;
+
         [Header("Pre-Generated Glyph Data")]
         [Tooltip("All generated glyphs from the source text")]
         public GlyphMeshData[] glyphMeshes;

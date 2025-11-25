@@ -679,21 +679,21 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void GenerateGlyphMeshData(GlyphText3DAsset asset)
         {
-            if (string.IsNullOrEmpty(text) || fontAsset == null)
+            if (fontAsset == null)
             {
                 asset.glyphMeshes = new GlyphMeshData[0];
                 return;
             }
 
-            // Get unique characters from the text (maintain order)
-            var uniqueChars = new List<char>();
-            foreach (char c in text)
+            // Get ALL characters from the TMP font asset's character lookup table
+            var allChars = new List<char>();
+            foreach (var kvp in fontAsset.characterLookupTable)
             {
-                if (!uniqueChars.Contains(c))
-                {
-                    uniqueChars.Add(c);
-                }
+                allChars.Add((char)kvp.Key);
             }
+
+            // Sort for consistent ordering
+            allChars.Sort();
 
             var glyphDataList = new List<GlyphMeshData>();
             float xOffset = 0f;
@@ -718,16 +718,20 @@ namespace LanternPines.GlyphMesh3D.Core
                 TextSize = textSize
             };
 
-            // Generate mesh for each unique character
-            for (int i = 0; i < uniqueChars.Count; i++)
+            // Store materials from generator
+            asset.materials = meshRenderer.sharedMaterials;
+            asset.materialSlotCount = asset.materials != null ? asset.materials.Length : 0;
+
+            // Generate mesh for each character in the font
+            for (int i = 0; i < allChars.Count; i++)
             {
-                char c = uniqueChars[i];
+                char c = allChars[i];
 
                 // Update progress bar
-                float progress = (float)i / uniqueChars.Count;
+                float progress = (float)i / allChars.Count;
                 EditorUtility.DisplayProgressBar(
                     "Generating Glyph Asset",
-                    $"Processing character '{c}' ({i + 1}/{uniqueChars.Count})",
+                    $"Processing character '{c}' ({i + 1}/{allChars.Count})",
                     progress);
 
                 // Extract contours for this character
@@ -801,25 +805,40 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
                     glyphData.character = c;
-                    glyphData.xOffset = xOffset;
+                    glyphData.xOffset = minX;  // Store where this character's left edge is
+
+                    // Convert vertices to local space (subtract minX to make them start at x=0)
+                    var localVertices = new Vector3[allVertices.Count];
+                    for (int v = 0; v < allVertices.Count; v++)
+                    {
+                        localVertices[v] = new Vector3(
+                            allVertices[v].x - minX,  // Convert to local X
+                            allVertices[v].y,
+                            allVertices[v].z
+                        );
+                    }
+
+                    // Store bounds in local space
                     glyphData.bounds = new Bounds(
-                        new Vector3((minX + maxX) / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
+                        new Vector3(charWidth / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
                         new Vector3(charWidth, charHeight, extrusionDepth)
                     );
 
-                    // Get advance width from font metrics
+                    // Calculate advance width based on actual mesh width + spacing
+                    glyphData.advanceWidth = charWidth + characterSpacing * (textSize / 100f);
+
+                    // Get baseline offset from font metrics
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                     {
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            glyphData.advanceWidth = glyph.metrics.horizontalAdvance * (textSize / 100f);
                             glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
                         }
                     }
 
-                    // Store mesh data
-                    glyphData.vertices = allVertices.ToArray();
+                    // Store mesh data (vertices in local space)
+                    glyphData.vertices = localVertices;
                     glyphData.normals = allNormals.ToArray();
                     glyphData.uvs = allUVs.ToArray();
                     glyphData.colors = allColors.ToArray();
