@@ -430,16 +430,43 @@ namespace LanternPines.GlyphMesh3D.Core
 
             foreach (char c in text)
             {
+                int boundariesBeforeChar = allBoundaries.Count;
                 var boundaries = GlyphContourExtractor.ExtractContours(fontAsset, c, extractionSettings, xOffset);
                 allBoundaries.AddRange(boundaries);
 
-                // Calculate advance width for next character
-                if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                // Calculate advance width based on actual character bounds
+                if (boundaries.Count > 0)
                 {
-                    var glyph = GetGlyph(glyphChar);
-                    if (glyph != null)
+                    // Calculate the actual bounding box of this character
+                    float minX = float.MaxValue;
+                    float maxX = float.MinValue;
+
+                    foreach (var boundary in boundaries)
                     {
-                        xOffset += (glyph.metrics.horizontalAdvance + 5f) * (textSize / 100f);
+                        foreach (var point in boundary)
+                        {
+                            minX = Mathf.Min(minX, point.x);
+                            maxX = Mathf.Max(maxX, point.x);
+                        }
+                    }
+
+                    // Character width is the extent of its bounds
+                    float charWidth = maxX - minX;
+
+                    // Add character width plus spacing, scaled by textSize
+                    // Use a small gap (5 units base) between characters
+                    xOffset = maxX + 5f * (textSize / 100f);
+                }
+                else
+                {
+                    // Fallback to font metrics if no boundaries (e.g., space character)
+                    if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
+                    {
+                        var glyph = GetGlyph(glyphChar);
+                        if (glyph != null)
+                        {
+                            xOffset += (glyph.metrics.horizontalAdvance + 5f) * (textSize / 100f);
+                        }
                     }
                 }
             }
