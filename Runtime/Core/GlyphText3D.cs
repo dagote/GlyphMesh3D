@@ -158,16 +158,35 @@ namespace LanternPines.GlyphMesh3D.Core
 
             Debug.Log($"GlyphText3D: Building text '{text}' using asset '{asset.name}' with {asset.glyphMeshes.Length} glyphs");
 
-            // TEMPORARY: Instantiate individual GameObjects for each character instead of combining meshes
+            // Build combined mesh from glyphs
             try
             {
-                InstantiateIndividualGlyphs();
+                var combinedMesh = BuildCombinedMesh();
+
+                if (combinedMesh != null)
+                {
+                    // Clear old mesh
+                    ClearMesh();
+
+                    // Assign new mesh
+                    meshFilter.sharedMesh = combinedMesh;
+
+                    // Update materials
+                    UpdateMaterials();
+                }
+                else
+                {
+                    ClearMesh();
+                }
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"GlyphText3D: Failed to instantiate glyphs - {ex.Message}\n{ex.StackTrace}");
-                ClearInstantiatedGlyphs();
+                Debug.LogError($"GlyphText3D: Failed to build combined mesh - {ex.Message}\n{ex.StackTrace}");
+                ClearMesh();
             }
+
+            // Clear any leftover individual glyphs from previous mode
+            ClearInstantiatedGlyphs();
         }
 
         /// <summary>
