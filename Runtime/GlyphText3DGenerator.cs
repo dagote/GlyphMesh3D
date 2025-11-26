@@ -805,12 +805,17 @@ namespace LanternPines.GlyphMesh3D.Core
                     var glyphMesh = new Mesh();
                     glyphMesh.name = $"Glyph_{c}_{(int)c}";
 
+                    // Calculate effective scale (same as used in mesh generation)
+                    float effectiveScale = 0.01f * (textSize / 100f);
+
                     // Normalize vertices to start at x=0 (subtract minX for consistent positioning)
+                    // IMPORTANT: minX is in pixels, vertices are scaled - must scale minX too
                     var normalizedVertices = new Vector3[allVertices.Count];
+                    float scaledMinX = minX * effectiveScale;
                     for (int v = 0; v < allVertices.Count; v++)
                     {
                         normalizedVertices[v] = new Vector3(
-                            allVertices[v].x - minX,
+                            allVertices[v].x - scaledMinX,
                             allVertices[v].y,
                             allVertices[v].z
                         );
