@@ -180,7 +180,7 @@ namespace LanternPines.GlyphMesh3D.Core
         [SerializeField] private float textSize = 100f;
         [Range(0f, 250f)]
         [Tooltip("Gap between characters in world units. Added directly to each character's mesh width.")]
-        [SerializeField] private float characterSpacing = 5f;
+        [SerializeField] private float characterSpacing = 1f;
 
         [Header("Extrusion Settings")]
         [Range(0f, 100f)]
@@ -263,7 +263,7 @@ namespace LanternPines.GlyphMesh3D.Core
             // Set default values
             glyphText.text = "Sample Text";
             glyphText.textSize = 100f;
-            glyphText.characterSpacing = 5f;
+            glyphText.characterSpacing = 1f;
             glyphText.extrusionDepth = 20f;
             glyphText.simplifyArcLength = 1.5f;
             glyphText.cornerAngleThreshold = 80f;
