@@ -847,8 +847,10 @@ namespace LanternPines.GlyphMesh3D.Core
 
                     // Use the actual mesh bounds width + characterSpacing (in units)
                     // The mesh width is already in the correct scale from the mesh generation
+                    // Scale characterSpacing the same way as in preview (by effectiveScale)
                     float meshWidth = glyphMesh.bounds.size.x;
-                    float advanceWidth = meshWidth + characterSpacing;
+                    float scaledSpacing = characterSpacing * effectiveScale;
+                    float advanceWidth = meshWidth + scaledSpacing;
 
                     // Get baseline offset from font metrics
                     float baselineOffset = 0f;
@@ -861,7 +863,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, spacing={characterSpacing:F2}, advanceWidth={advanceWidth:F2}");
+                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, scaledSpacing={scaledSpacing:F2}, advanceWidth={advanceWidth:F2}");
 
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
@@ -891,9 +893,11 @@ namespace LanternPines.GlyphMesh3D.Core
                         if (glyph != null)
                         {
                             // Use the glyph's width metric scaled by the same factor used in mesh generation
-                            // SCALE_FACTOR = 0.01f, textSize default = 100
-                            float meshWidth = glyph.metrics.width * 0.01f * (textSize / 100f);
-                            glyphData.advanceWidth = meshWidth + characterSpacing;
+                            // Scale characterSpacing the same way as visible characters
+                            float effectiveScale = 0.01f * (textSize / 100f);
+                            float meshWidth = glyph.metrics.width * effectiveScale;
+                            float scaledSpacing = characterSpacing * effectiveScale;
+                            glyphData.advanceWidth = meshWidth + scaledSpacing;
                             glyphData.baselineOffset = glyph.metrics.horizontalBearingY * (textSize / 100f);
                         }
                     }
