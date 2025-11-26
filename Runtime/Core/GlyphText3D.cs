@@ -244,12 +244,12 @@ namespace LanternPines.GlyphMesh3D.Core
                     }
                 }
 
-                // Advance position by fixed 1 unit distance
+                // Advance position using stored advance width from asset
                 if (glyphData.mesh == null)
                 {
-                    Debug.Log($"  Glyph '{c}': no mesh (space?), using 1 unit spacing");
+                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
                 }
-                currentXOffset += 1f;
+                currentXOffset += glyphData.advanceWidth;
             }
 
             // Remove excess glyphs if text got shorter
@@ -300,19 +300,19 @@ namespace LanternPines.GlyphMesh3D.Core
                 // If this is an empty glyph (like space) or no mesh, just advance the position
                 if (glyphData.mesh == null)
                 {
-                    Debug.Log($"  Glyph '{c}': no mesh (space?), using 1 unit spacing");
-                    currentXOffset += 1f;
+                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
+                    currentXOffset += glyphData.advanceWidth;
                     continue;
                 }
 
-                Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}");
-                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by 1 unit");
+                Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
+                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by {glyphData.advanceWidth}");
 
                 // Store this glyph and its position
                 glyphsToRender.Add((glyphData, new Vector3(currentXOffset, 0f, 0f)));
 
-                // Advance position for next character by fixed 1 unit
-                currentXOffset += 1f;
+                // Advance position using stored advance width from asset
+                currentXOffset += glyphData.advanceWidth;
             }
 
             // If no meshes were added, return null
