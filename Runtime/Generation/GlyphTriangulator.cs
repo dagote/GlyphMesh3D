@@ -87,12 +87,15 @@ namespace LanternPines.GlyphMesh3D.Generation
 
             Debug.Log($"GlyphTriangulator.GroupBoundariesByOuter: Processing {n} boundaries");
 
+            // Use first vertex of each boundary instead of centroid for containment testing
+            // Centroids can move outside the polygon after aggressive simplification
+            var testPoints = new Vector2[n];
             for (int i = 0; i < n; i++)
             {
-                Vector2 c = Vector2.zero;
-                foreach (var p in boundaries[i]) c += p;
-                c /= boundaries[i].Count;
-                centroids[i] = c;
+                if (boundaries[i].Count > 0)
+                {
+                    testPoints[i] = boundaries[i][0];
+                }
             }
 
             var parent = Enumerable.Repeat(-1, n).ToArray();
@@ -105,8 +108,8 @@ namespace LanternPines.GlyphMesh3D.Generation
                     if (i == j) continue;
                     if (areas[j] <= areas[i]) continue;
 
-                    bool isInside = IsPointInPolygon(centroids[i], boundaries[j]);
-                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}, centroid={centroids[i]}) is inside boundary {j} (area={areas[j]:F2}): {isInside}");
+                    bool isInside = IsPointInPolygon(testPoints[i], boundaries[j]);
+                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}, testPoint={testPoints[i]}) is inside boundary {j} (area={areas[j]:F2}): {isInside}");
 
                     if (isInside)
                     {
