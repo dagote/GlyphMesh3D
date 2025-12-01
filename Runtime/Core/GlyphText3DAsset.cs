@@ -84,7 +84,10 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Horizontal advance width for this character")]
         public float advanceWidth;
 
-        [Tooltip("Baseline offset")]
+        [Tooltip("Horizontal bearing X (offset from origin to place mesh)")]
+        public float bearingX;
+
+        [Tooltip("Baseline offset (vertical position relative to baseline)")]
         public float baselineOffset;
 
         [Tooltip("Bounding box of the glyph")]

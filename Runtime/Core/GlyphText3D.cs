@@ -325,10 +325,11 @@ namespace LanternPines.GlyphMesh3D.Core
                 }
 
                 Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
-                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, will advance by {glyphData.advanceWidth}");
+                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
 
                 // Store this glyph and its position
-                glyphsToRender.Add((glyphData, new Vector3(currentXOffset, 0f, 0f)));
+                // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
+                glyphsToRender.Add((glyphData, new Vector3(currentXOffset + glyphData.bearingX, glyphData.baselineOffset, 0f)));
 
                 // Advance position using stored advance width from asset
                 currentXOffset += glyphData.advanceWidth;
