@@ -262,8 +262,13 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 char c = text[i];
 
-                if (c == '\n')
+                if (IsNewLineCharacter(c))
                 {
+                    if (IsCarriageReturnFollowedByLineFeed(text, i))
+                    {
+                        i++;
+                    }
+
                     currentXOffset = 0f;
                     currentYOffset -= lineAdvance;
                     continue;
@@ -372,10 +377,17 @@ namespace LanternPines.GlyphMesh3D.Core
             var glyphsToRender = new List<(GlyphMeshData data, Vector3 position)>();
 
             // Process each character in the text
-            foreach (char c in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                if (c == '\n')
+                char c = text[i];
+
+                if (IsNewLineCharacter(c))
                 {
+                    if (IsCarriageReturnFollowedByLineFeed(text, i))
+                    {
+                        i++;
+                    }
+
                     currentXOffset = 0f;
                     currentYOffset -= lineAdvance;
                     continue;
@@ -512,11 +524,16 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private float GetLineAdvance()
         {
-            float baseLineHeight = (asset != null && asset.fontAsset != null)
-                ? asset.fontAsset.faceInfo.lineHeight
-                : 1f;
+            if (asset != null && asset.fontAsset != null)
+            {
+                var faceInfo = asset.fontAsset.faceInfo;
+                float pointSize = Mathf.Approximately(faceInfo.pointSize, 0f) ? 1f : faceInfo.pointSize;
+                float normalizedLineHeight = faceInfo.lineHeight / pointSize;
 
-            return baseLineHeight * (1f + lineSpacing);
+                return normalizedLineHeight * (1f + lineSpacing);
+            }
+
+            return (1f + lineSpacing);
         }
 
         private float GetAdvanceMultiplier(char character)
@@ -529,6 +546,16 @@ namespace LanternPines.GlyphMesh3D.Core
             }
 
             return advanceMultiplier;
+        }
+
+        private static bool IsNewLineCharacter(char character)
+        {
+            return character == '\n' || character == '\r';
+        }
+
+        private static bool IsCarriageReturnFollowedByLineFeed(string value, int index)
+        {
+            return value[index] == '\r' && index + 1 < value.Length && value[index + 1] == '\n';
         }
 
         /// <summary>
