@@ -36,7 +36,6 @@ namespace LanternPines.GlyphMesh3D.Visualization
         {
             if (meshFilter == null || meshFilter.sharedMesh == null)
             {
-                Debug.LogError("MeshFilter or Mesh is not assigned.");
                 return;
             }
 
@@ -46,7 +45,6 @@ namespace LanternPines.GlyphMesh3D.Visualization
 
             if (uvs.Count == 0)
             {
-                Debug.LogError("No UVs found in the mesh.");
                 return;
             }
 
@@ -132,8 +130,6 @@ namespace LanternPines.GlyphMesh3D.Visualization
             byte[] bytes = uvMapFormat == UVMapFormat.PNG ? texture.EncodeToPNG() : texture.EncodeToJPG();
             System.IO.File.WriteAllBytes(path, bytes);
             AssetDatabase.Refresh();
-
-            Debug.Log($"UV Map saved to: {path}");
         }
     }
 }

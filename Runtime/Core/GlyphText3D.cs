@@ -113,7 +113,6 @@ namespace LanternPines.GlyphMesh3D.Core
                     !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
                     !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
                 {
-                    Debug.Log($"GlyphText3D.Update: Text changed from '{previousText}' to '{text}'");
                     RegenerateMeshFromAsset();
                     previousText = text;
                     previousAsset = asset;
@@ -137,7 +136,6 @@ namespace LanternPines.GlyphMesh3D.Core
                 !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
                 !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
             {
-                Debug.Log($"GlyphText3D.OnValidate: Text changed from '{previousText}' to '{text}'");
                 RegenerateMeshFromAsset();
                 previousText = text;
                 previousAsset = asset;
@@ -181,7 +179,6 @@ namespace LanternPines.GlyphMesh3D.Core
             // Validation
             if (asset == null)
             {
-                Debug.LogWarning("GlyphText3D: No asset assigned.");
                 ClearMesh();
                 ClearInstantiatedGlyphs();
                 return;
@@ -189,7 +186,6 @@ namespace LanternPines.GlyphMesh3D.Core
 
             if (string.IsNullOrEmpty(text))
             {
-                Debug.Log("GlyphText3D: Text is empty.");
                 ClearMesh();
                 ClearInstantiatedGlyphs();
                 return;
@@ -197,13 +193,10 @@ namespace LanternPines.GlyphMesh3D.Core
 
             if (asset.glyphMeshes == null || asset.glyphMeshes.Length == 0)
             {
-                Debug.LogWarning($"GlyphText3D: Asset '{asset.name}' has no glyph data. Please regenerate the asset using the GlyphText3DGenerator.");
                 ClearMesh();
                 ClearInstantiatedGlyphs();
                 return;
             }
-
-            Debug.Log($"GlyphText3D: Building text '{text}' using asset '{asset.name}' with {asset.glyphMeshes.Length} glyphs");
 
             // Build combined mesh from glyphs
             try
@@ -228,7 +221,6 @@ namespace LanternPines.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"GlyphText3D: Failed to build combined mesh - {ex.Message}\n{ex.StackTrace}");
                 ClearMesh();
             }
 
@@ -278,7 +270,6 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 if (glyphData == null)
                 {
-                    Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
                     continue;
                 }
 
@@ -300,7 +291,6 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
 
                         targetGlyphCount++;
-                        Debug.Log($"  Updated glyph '{c}' at position ({currentXOffset}, {currentYOffset}, 0)");
                     }
                 }
                 else
@@ -308,8 +298,6 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Create new glyph
                     if (glyphData.mesh != null)
                     {
-                        Debug.Log($"  Creating new glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, {currentYOffset}, 0)");
-
                         GameObject glyphObject = new GameObject($"Glyph_{c}");
                         glyphObject.transform.SetParent(transform, false);
                         glyphObject.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, (glyphData.baselineOffset + currentYOffset) * scale, 0f);
@@ -337,7 +325,6 @@ namespace LanternPines.GlyphMesh3D.Core
                 // Advance position using stored advance width from asset
                 if (glyphData.mesh == null)
                 {
-                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
                 }
                 currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
@@ -351,15 +338,12 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 if (toRemove != null)
                 {
-                    Debug.Log($"  Removing excess glyph at index {lastIndex}");
                     if (Application.isPlaying)
                         Destroy(toRemove);
                     else
                         DestroyImmediate(toRemove);
                 }
             }
-
-            Debug.Log($"GlyphText3D: Incremental update complete - {targetGlyphCount} character GameObjects");
         }
 
         /// <summary>
@@ -398,7 +382,6 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 if (glyphData == null)
                 {
-                    Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
                     continue;
                 }
 
@@ -407,13 +390,9 @@ namespace LanternPines.GlyphMesh3D.Core
                 // If this is an empty glyph (like space) or no mesh, just advance the position
                 if (glyphData.mesh == null)
                 {
-                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
                     currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
                     continue;
                 }
-
-                Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
-                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, yOffset={currentYOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
 
                 // Store this glyph and its position
                 // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
@@ -426,15 +405,11 @@ namespace LanternPines.GlyphMesh3D.Core
             // If no meshes were added, return null
             if (glyphsToRender.Count == 0)
             {
-                Debug.LogWarning($"GlyphText3D: No meshes found. Processed {processedGlyphs} glyphs from text '{text}'");
                 return null;
             }
 
-            Debug.Log($"GlyphText3D: Combining {glyphsToRender.Count} glyph meshes");
-
             // Determine the number of submeshes from the first glyph
             int submeshCount = glyphsToRender[0].Item1.mesh.subMeshCount;
-            Debug.Log($"GlyphText3D: Expected submesh count = {submeshCount}");
 
             // Create the combined mesh
             var mesh = new Mesh();
@@ -516,8 +491,6 @@ namespace LanternPines.GlyphMesh3D.Core
             }
 
             mesh.RecalculateBounds();
-
-            Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, {mesh.subMeshCount} submeshes, bounds = {mesh.bounds}");
 
             return mesh;
         }

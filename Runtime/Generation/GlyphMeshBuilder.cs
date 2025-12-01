@@ -690,12 +690,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                         // Determine which color this band should use
                         float bandColorIndex = GetBandColorIndex(layerIdx, totalBands);
 
-                        // Debug: Log quadrant assignment
-                        if (b == 0 && i == 0) // Only log once per band to avoid spam
-                        {
-                            Debug.Log($"Band {layerIdx}/{totalBands}: Quadrant {bandQuadrant}, Color Index {(int)(bandColorIndex * 8)}, Layer depths: {layers[layerIdx].depth} -> {layers[layerIdx + 1].depth}");
-                        }
-
                         // Map to full quadrant area
                         // U varies (0 to 1) to wrap around the perimeter
                         // V varies (0 to 1) from current layer to next layer
