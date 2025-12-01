@@ -63,6 +63,13 @@ namespace LanternPines.GlyphMesh3D.Generation
 
             // Find chains and create boundaries
             var chains = FindChains(edgePixels);
+
+            // Debug logging for 'g' character
+            if (character == 'g' || character == 'G')
+            {
+                Debug.Log($"GlyphContourExtractor: Character '{character}' - Found {chains.Count} chains from {edgePixels.Count} edge pixels");
+            }
+
             foreach (var chain in chains)
             {
                 var ordered = OrderChain(chain);
@@ -76,6 +83,13 @@ namespace LanternPines.GlyphMesh3D.Generation
                 {
                     float signedArea = GetSignedArea(simplified);
                     if (signedArea < 0f) simplified.Reverse();
+
+                    // Debug logging for 'g' character
+                    if (character == 'g' || character == 'G')
+                    {
+                        Debug.Log($"  Chain: {ordered.Count} points → {simplified.Count} simplified, area={signedArea:F2}");
+                    }
+
                     boundaries.Add(simplified);
                 }
             }

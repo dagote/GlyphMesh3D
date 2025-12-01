@@ -85,6 +85,8 @@ namespace LanternPines.GlyphMesh3D.Generation
             var areas = boundaries.Select(b => Mathf.Abs(GetSignedArea(b))).ToArray();
             var centroids = new Vector2[n];
 
+            Debug.Log($"GlyphTriangulator.GroupBoundariesByOuter: Processing {n} boundaries");
+
             for (int i = 0; i < n; i++)
             {
                 Vector2 c = Vector2.zero;
@@ -118,10 +120,16 @@ namespace LanternPines.GlyphMesh3D.Generation
             {
                 if (parent[i] != -1) continue;
                 var group = new List<List<Vector2>> { boundaries[i] };
+                int holeCount = 0;
                 for (int j = 0; j < n; j++)
                 {
-                    if (parent[j] == i) group.Add(boundaries[j]);
+                    if (parent[j] == i)
+                    {
+                        group.Add(boundaries[j]);
+                        holeCount++;
+                    }
                 }
+                Debug.Log($"  Group {groups.Count}: 1 outer (area={areas[i]:F2}) + {holeCount} holes");
                 groups.Add(group);
             }
             return groups;
