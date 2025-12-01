@@ -63,6 +63,10 @@ namespace LanternPines.GlyphMesh3D.Core
         private List<GameObject> instantiatedGlyphs = new List<GameObject>();
 
 #if UNITY_EDITOR
+        private bool validateScheduled;
+#endif
+
+#if UNITY_EDITOR
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
         private static void CreateGlyphText3DObject()
         {
@@ -106,21 +110,10 @@ namespace LanternPines.GlyphMesh3D.Core
             #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                if (text != previousText || asset != previousAsset ||
-                    !Mathf.Approximately(fontSize, previousFontSize) ||
-                    !Mathf.Approximately(characterSpacing, previousCharacterSpacing) ||
-                    !Mathf.Approximately(wordSpacing, previousWordSpacing) ||
-                    !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
-                    !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
+                if (HasChangedSinceLastRegeneration())
                 {
                     RegenerateMeshFromAsset();
-                    previousText = text;
-                    previousAsset = asset;
-                    previousFontSize = fontSize;
-                    previousCharacterSpacing = characterSpacing;
-                    previousWordSpacing = wordSpacing;
-                    previousLineSpacing = lineSpacing;
-                    previousParagraphSpacing = paragraphSpacing;
+                    CacheCurrentState();
                 }
             }
             #endif
@@ -128,24 +121,72 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void OnValidate()
         {
+            #if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                QueueDelayedRegeneration();
+                return;
+            }
+            #endif
+
             // Detect changes and regenerate
-            if (text != previousText || asset != previousAsset ||
+            if (HasChangedSinceLastRegeneration())
+            {
+                RegenerateMeshFromAsset();
+                CacheCurrentState();
+            }
+        }
+
+        private bool HasChangedSinceLastRegeneration()
+        {
+            return text != previousText || asset != previousAsset ||
                 !Mathf.Approximately(fontSize, previousFontSize) ||
                 !Mathf.Approximately(characterSpacing, previousCharacterSpacing) ||
                 !Mathf.Approximately(wordSpacing, previousWordSpacing) ||
                 !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
-                !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
+                !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing);
+        }
+
+        private void CacheCurrentState()
+        {
+            previousText = text;
+            previousAsset = asset;
+            previousFontSize = fontSize;
+            previousCharacterSpacing = characterSpacing;
+            previousWordSpacing = wordSpacing;
+            previousLineSpacing = lineSpacing;
+            previousParagraphSpacing = paragraphSpacing;
+        }
+
+#if UNITY_EDITOR
+        private void QueueDelayedRegeneration()
+        {
+            if (validateScheduled)
+            {
+                return;
+            }
+
+            validateScheduled = true;
+            EditorApplication.delayCall += HandleDelayedRegeneration;
+        }
+
+        private void HandleDelayedRegeneration()
+        {
+            EditorApplication.delayCall -= HandleDelayedRegeneration;
+            validateScheduled = false;
+
+            if (this == null)
+            {
+                return;
+            }
+
+            if (HasChangedSinceLastRegeneration())
             {
                 RegenerateMeshFromAsset();
-                previousText = text;
-                previousAsset = asset;
-                previousFontSize = fontSize;
-                previousCharacterSpacing = characterSpacing;
-                previousWordSpacing = wordSpacing;
-                previousLineSpacing = lineSpacing;
-                previousParagraphSpacing = paragraphSpacing;
+                CacheCurrentState();
             }
         }
+#endif
 
         /// <summary>
         /// Public API to update the displayed text.
@@ -605,6 +646,13 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void OnDestroy()
         {
+#if UNITY_EDITOR
+            if (validateScheduled)
+            {
+                EditorApplication.delayCall -= HandleDelayedRegeneration;
+                validateScheduled = false;
+            }
+#endif
             ClearMesh();
             ClearInstantiatedGlyphs();
         }
