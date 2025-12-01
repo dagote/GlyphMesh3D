@@ -175,9 +175,9 @@ namespace LanternPines.GlyphMesh3D.Core
         [Header("Text Settings")]
         [SerializeField] private TMP_FontAsset fontAsset;
         [SerializeField] private string text = "Sample Text";
-        [Range(0f, 250f)]
-        [Tooltip("Gap between characters in world units. Added directly to each character's mesh width.")]
-        [SerializeField] private float characterSpacing = 1f;
+        [Range(0f, 1f)]
+        [Tooltip("Normalized spacing multiplier applied to each character's width (0 = none, 1 = 100% extra width).")]
+        [SerializeField] private float characterSpacing = 0.1f;
 
         [Header("Extrusion Settings")]
         [Range(0f, 100f)]
@@ -259,7 +259,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
             // Set default values
             glyphText.text = "Sample Text";
-            glyphText.characterSpacing = 1f;
+            glyphText.characterSpacing = 0.1f;
             glyphText.extrusionDepth = 20f;
             glyphText.simplifyArcLength = 1.5f;
             glyphText.cornerAngleThreshold = 80f;
@@ -426,7 +426,7 @@ namespace LanternPines.GlyphMesh3D.Core
             float pixelsPerFontUnit;
             float normalizationScale = CalculateNormalizationScale(out pixelsPerFontUnit);
             float pixelsPerUnit = normalizationScale > 0f ? 1f / normalizationScale : 0f;
-            float spacingPixels = pixelsPerUnit * characterSpacing;
+            float spacingMultiplier = 1f + characterSpacing;
 
             if (pixelsPerFontUnit <= 0f)
             {
@@ -463,7 +463,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     float charWidth = maxX - minX;
 
                     // Add character width plus spacing (spacing converted to pixel space)
-                    xOffset = maxX + spacingPixels;
+                    xOffset += charWidth * spacingMultiplier;
                 }
                 else
                 {
@@ -473,7 +473,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            xOffset += (glyph.metrics.horizontalAdvance * pixelsPerFontUnit) + spacingPixels;
+                            xOffset += (glyph.metrics.horizontalAdvance * pixelsPerFontUnit) * spacingMultiplier;
                         }
                     }
                 }
@@ -896,10 +896,9 @@ namespace LanternPines.GlyphMesh3D.Core
 
                     glyphMesh.RecalculateBounds();
 
-                    // Use the actual mesh bounds width + characterSpacing (in normalized units)
+                    // Use the actual mesh bounds width as the baseline advance
                     float meshWidth = glyphMesh.bounds.size.x;
-                    float scaledSpacing = characterSpacing;
-                    float advanceWidth = meshWidth + scaledSpacing;
+                    float advanceWidth = meshWidth;
 
                     // Get bearing offsets from font metrics
                     float bearingX = 0f;
@@ -958,10 +957,8 @@ namespace LanternPines.GlyphMesh3D.Core
                         if (glyph != null)
                         {
                             // Use the glyph's width metric scaled by the same factor used in mesh generation
-                            // Scale characterSpacing the same way as visible characters
                             float meshWidth = glyph.metrics.horizontalAdvance * pixelsPerFontUnit * normalizationScale;
-                            float scaledSpacing = characterSpacing;
-                            glyphData.advanceWidth = meshWidth + scaledSpacing;
+                            glyphData.advanceWidth = meshWidth;
                             glyphData.bearingX = glyph.metrics.horizontalBearingX * pixelsPerFontUnit * normalizationScale;
                             // For non-rendered characters like space, use 0 as baseline offset
                             // (they have no visual position, only spacing)
