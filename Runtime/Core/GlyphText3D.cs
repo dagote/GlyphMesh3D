@@ -27,6 +27,23 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Font size in points, following TextMeshPro scaling conventions (36pt ≈ 1 unit cap height)")]
         public float fontSize = 36f;
 
+        [Header("Spacing Options")]
+        [Tooltip("Normalized additional spacing multiplier applied between characters (0 = none, 1 = 100% extra spacing)")]
+        [Range(0f, 1f)]
+        public float characterSpacing = 0.1f;
+
+        [Tooltip("Normalized additional spacing multiplier applied to space characters between words")]
+        [Range(0f, 1f)]
+        public float wordSpacing = 0f;
+
+        [Tooltip("Normalized spacing multiplier applied when encountering a newline character")]
+        [Range(0f, 1f)]
+        public float lineSpacing = 0f;
+
+        [Tooltip("Placeholder for future paragraph spacing support (not yet implemented)")]
+        [Range(0f, 1f)]
+        public float paragraphSpacing = 0f;
+
         // Cached components
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
@@ -37,6 +54,10 @@ namespace LanternPines.GlyphMesh3D.Core
         private string previousText;
         private GlyphText3DAsset previousAsset;
         private float previousFontSize = 36f;
+        private float previousCharacterSpacing = 0.1f;
+        private float previousWordSpacing = 0f;
+        private float previousLineSpacing = 0f;
+        private float previousParagraphSpacing = 0f;
 
         // Track instantiated character GameObjects
         private List<GameObject> instantiatedGlyphs = new List<GameObject>();
@@ -85,13 +106,22 @@ namespace LanternPines.GlyphMesh3D.Core
             #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                if (text != previousText || asset != previousAsset || !Mathf.Approximately(fontSize, previousFontSize))
+                if (text != previousText || asset != previousAsset ||
+                    !Mathf.Approximately(fontSize, previousFontSize) ||
+                    !Mathf.Approximately(characterSpacing, previousCharacterSpacing) ||
+                    !Mathf.Approximately(wordSpacing, previousWordSpacing) ||
+                    !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
+                    !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
                 {
                     Debug.Log($"GlyphText3D.Update: Text changed from '{previousText}' to '{text}'");
                     RegenerateMeshFromAsset();
                     previousText = text;
                     previousAsset = asset;
                     previousFontSize = fontSize;
+                    previousCharacterSpacing = characterSpacing;
+                    previousWordSpacing = wordSpacing;
+                    previousLineSpacing = lineSpacing;
+                    previousParagraphSpacing = paragraphSpacing;
                 }
             }
             #endif
@@ -100,13 +130,22 @@ namespace LanternPines.GlyphMesh3D.Core
         private void OnValidate()
         {
             // Detect changes and regenerate
-            if (text != previousText || asset != previousAsset || !Mathf.Approximately(fontSize, previousFontSize))
+            if (text != previousText || asset != previousAsset ||
+                !Mathf.Approximately(fontSize, previousFontSize) ||
+                !Mathf.Approximately(characterSpacing, previousCharacterSpacing) ||
+                !Mathf.Approximately(wordSpacing, previousWordSpacing) ||
+                !Mathf.Approximately(lineSpacing, previousLineSpacing) ||
+                !Mathf.Approximately(paragraphSpacing, previousParagraphSpacing))
             {
                 Debug.Log($"GlyphText3D.OnValidate: Text changed from '{previousText}' to '{text}'");
                 RegenerateMeshFromAsset();
                 previousText = text;
                 previousAsset = asset;
                 previousFontSize = fontSize;
+                previousCharacterSpacing = characterSpacing;
+                previousWordSpacing = wordSpacing;
+                previousLineSpacing = lineSpacing;
+                previousParagraphSpacing = paragraphSpacing;
             }
         }
 
@@ -199,6 +238,10 @@ namespace LanternPines.GlyphMesh3D.Core
             previousText = text;
             previousAsset = asset;
             previousFontSize = fontSize;
+            previousCharacterSpacing = characterSpacing;
+            previousWordSpacing = wordSpacing;
+            previousLineSpacing = lineSpacing;
+            previousParagraphSpacing = paragraphSpacing;
         }
 
         /// <summary>
@@ -210,12 +253,22 @@ namespace LanternPines.GlyphMesh3D.Core
             // Incremental update: only add/remove glyphs that changed
             int targetGlyphCount = 0;
             float currentXOffset = 0f;
+            float currentYOffset = 0f;
+            float lineAdvance = GetLineAdvance();
             float scale = fontSize * UnitsPerPoint;
 
             // First pass: count how many glyphs we need and update positions
             for (int i = 0; i < text.Length; i++)
             {
                 char c = text[i];
+
+                if (c == '\n')
+                {
+                    currentXOffset = 0f;
+                    currentYOffset -= lineAdvance;
+                    continue;
+                }
+
                 GlyphMeshData glyphData = asset.GetGlyphData(c);
 
                 if (glyphData == null)
@@ -233,7 +286,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     if (glyphData.mesh != null)
                     {
                         existingGlyph.name = $"Glyph_{c}";
-                        existingGlyph.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f);
+                        existingGlyph.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, (glyphData.baselineOffset + currentYOffset) * scale, 0f);
 
                         MeshFilter glyphMeshFilter = existingGlyph.GetComponent<MeshFilter>();
                         if (glyphMeshFilter.sharedMesh != glyphData.mesh)
@@ -242,7 +295,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
 
                         targetGlyphCount++;
-                        Debug.Log($"  Updated glyph '{c}' at position ({currentXOffset}, 0, 0)");
+                        Debug.Log($"  Updated glyph '{c}' at position ({currentXOffset}, {currentYOffset}, 0)");
                     }
                 }
                 else
@@ -250,11 +303,11 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Create new glyph
                     if (glyphData.mesh != null)
                     {
-                        Debug.Log($"  Creating new glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, 0, 0)");
+                        Debug.Log($"  Creating new glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, position=({currentXOffset}, {currentYOffset}, 0)");
 
                         GameObject glyphObject = new GameObject($"Glyph_{c}");
                         glyphObject.transform.SetParent(transform, false);
-                        glyphObject.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f);
+                        glyphObject.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, (glyphData.baselineOffset + currentYOffset) * scale, 0f);
 
                         MeshFilter glyphMeshFilter = glyphObject.AddComponent<MeshFilter>();
                         MeshRenderer glyphMeshRenderer = glyphObject.AddComponent<MeshRenderer>();
@@ -281,7 +334,7 @@ namespace LanternPines.GlyphMesh3D.Core
                 {
                     Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
                 }
-                currentXOffset += glyphData.advanceWidth;
+                currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
 
             // Remove excess glyphs if text got shorter
@@ -311,6 +364,8 @@ namespace LanternPines.GlyphMesh3D.Core
         {
             float scale = fontSize * UnitsPerPoint;
             float currentXOffset = 0f;
+            float currentYOffset = 0f;
+            float lineAdvance = GetLineAdvance();
             int processedGlyphs = 0;
 
             // Collect glyph data and positions for all valid characters
@@ -319,6 +374,13 @@ namespace LanternPines.GlyphMesh3D.Core
             // Process each character in the text
             foreach (char c in text)
             {
+                if (c == '\n')
+                {
+                    currentXOffset = 0f;
+                    currentYOffset -= lineAdvance;
+                    continue;
+                }
+
                 // Get glyph data for this character
                 GlyphMeshData glyphData = asset.GetGlyphData(c);
 
@@ -334,19 +396,19 @@ namespace LanternPines.GlyphMesh3D.Core
                 if (glyphData.mesh == null)
                 {
                     Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
-                    currentXOffset += glyphData.advanceWidth;
+                    currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
                     continue;
                 }
 
                 Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
-                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
+                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, yOffset={currentYOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
 
                 // Store this glyph and its position
                 // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
-                glyphsToRender.Add((glyphData, new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f)));
+                glyphsToRender.Add((glyphData, new Vector3((currentXOffset + glyphData.bearingX) * scale, (glyphData.baselineOffset + currentYOffset) * scale, 0f)));
 
                 // Advance position using stored advance width from asset
-                currentXOffset += glyphData.advanceWidth;
+                currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
 
             // If no meshes were added, return null
@@ -446,6 +508,27 @@ namespace LanternPines.GlyphMesh3D.Core
             Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, {mesh.subMeshCount} submeshes, bounds = {mesh.bounds}");
 
             return mesh;
+        }
+
+        private float GetLineAdvance()
+        {
+            float baseLineHeight = (asset != null && asset.fontAsset != null)
+                ? asset.fontAsset.faceInfo.lineHeight
+                : 1f;
+
+            return baseLineHeight * (1f + lineSpacing);
+        }
+
+        private float GetAdvanceMultiplier(char character)
+        {
+            float advanceMultiplier = 1f + characterSpacing;
+
+            if (character == ' ' || character == '\t')
+            {
+                advanceMultiplier += wordSpacing;
+            }
+
+            return advanceMultiplier;
         }
 
         /// <summary>
