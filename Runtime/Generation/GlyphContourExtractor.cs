@@ -56,26 +56,23 @@ namespace LanternPines.GlyphMesh3D.Generation
             if (glyphRect.width == 0 || glyphRect.height == 0)
                 return boundaries;
 
-            // Extract glyph edge pixels
-            var edgePixels = ExtractGlyphEdgePixels(atlasTexture, glyphRect);
-            if (edgePixels == null || edgePixels.Count == 0)
+            // Extract iso-contours directly from the SDF so contour quality stays consistent
+            // regardless of glyph scale (e.g., size 300 atlas generation).
+            var isoContours = ExtractIsoContours(atlasTexture, glyphRect, 0.5f);
+            if (isoContours.Count == 0)
                 return boundaries;
-
-            // Find chains and create boundaries
-            var chains = FindChains(edgePixels);
 
             // Debug logging for 'g' character
             if (character == 'g' || character == 'G')
             {
-                Debug.Log($"GlyphContourExtractor: Character '{character}' - Found {chains.Count} chains from {edgePixels.Count} edge pixels");
+                Debug.Log($"GlyphContourExtractor: Character '{character}' - Found {isoContours.Count} iso contours");
             }
 
-            foreach (var chain in chains)
+            foreach (var contour in isoContours)
             {
-                var ordered = OrderChain(chain);
-                if (ordered.Count < 3) continue;
+                if (contour.Count < 3) continue;
 
-                var pts = ordered.Select(p => new Vector2(p.x + xOffset, p.y)).ToList();
+                var pts = contour.Select(p => new Vector2(p.x + xOffset, p.y)).ToList();
                 var simplified = SimplifyHybrid(pts, settings.simplifyArcLength,
                     settings.cornerAngleThreshold, settings.postDpEpsilon);
 
@@ -87,7 +84,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                     // Debug logging for 'g' character
                     if (character == 'g' || character == 'G')
                     {
-                        Debug.Log($"  Chain: {ordered.Count} points → {simplified.Count} simplified, area={signedArea:F2}");
+                        Debug.Log($"  Contour: {contour.Count} points → {simplified.Count} simplified, area={signedArea:F2}");
                     }
 
                     boundaries.Add(simplified);
@@ -154,6 +151,41 @@ namespace LanternPines.GlyphMesh3D.Generation
             return font.glyphTable.FirstOrDefault(g => g.index == glyphChar.glyphIndex);
         }
 
+        private static List<List<Vector2>> ExtractIsoContours(Texture2D atlasTexture, UnityEngine.TextCore.GlyphRect glyphRect, float isoLevel)
+        {
+            try
+            {
+                RenderTexture rt = RenderTexture.GetTemporary(atlasTexture.width, atlasTexture.height, 0);
+                Graphics.Blit(atlasTexture, rt);
+                RenderTexture.active = rt;
+                Texture2D readable = new Texture2D(atlasTexture.width, atlasTexture.height, TextureFormat.RGBA32, false);
+                readable.ReadPixels(new Rect(0, 0, atlasTexture.width, atlasTexture.height), 0, 0);
+                readable.Apply();
+                RenderTexture.active = null;
+                RenderTexture.ReleaseTemporary(rt);
+
+                Color[] pixels = readable.GetPixels(glyphRect.x, glyphRect.y, glyphRect.width, glyphRect.height);
+                float[,] grid = new float[glyphRect.height, glyphRect.width];
+
+                for (int y = 0; y < glyphRect.height; y++)
+                {
+                    int flippedY = glyphRect.height - 1 - y;
+                    for (int x = 0; x < glyphRect.width; x++)
+                    {
+                        float alpha = pixels[flippedY * glyphRect.width + x].a;
+                        grid[y, x] = alpha;
+                    }
+                }
+
+                Object.DestroyImmediate(readable);
+                return MarchingSquares(grid, isoLevel);
+            }
+            catch (System.Exception)
+            {
+                return new List<List<Vector2>>();
+            }
+        }
+
         private static List<Vector2Int> ExtractGlyphEdgePixels(Texture2D atlasTexture, UnityEngine.TextCore.GlyphRect glyphRect)
         {
             try
@@ -212,12 +244,110 @@ namespace LanternPines.GlyphMesh3D.Generation
             return false;
         }
 
+        private static List<List<Vector2>> MarchingSquares(float[,] grid, float isoLevel)
+        {
+            var segments = new List<(Vector2 start, Vector2 end)>();
+            int height = grid.GetLength(0);
+            int width = grid.GetLength(1);
+
+            Vector2 Interp(Vector2 a, Vector2 b, float va, float vb)
+            {
+                float t = Mathf.Approximately(va, vb) ? 0.5f : (isoLevel - va) / (vb - va);
+                t = Mathf.Clamp01(t);
+                return Vector2.Lerp(a, b, t);
+            }
+
+            for (int y = 0; y < height - 1; y++)
+            {
+                for (int x = 0; x < width - 1; x++)
+                {
+                    float v0 = grid[y, x];
+                    float v1 = grid[y, x + 1];
+                    float v2 = grid[y + 1, x + 1];
+                    float v3 = grid[y + 1, x];
+
+                    int idx = 0;
+                    if (v0 >= isoLevel) idx |= 1;
+                    if (v1 >= isoLevel) idx |= 2;
+                    if (v2 >= isoLevel) idx |= 4;
+                    if (v3 >= isoLevel) idx |= 8;
+
+                    Vector2 p0 = new Vector2(x, y);
+                    Vector2 p1 = new Vector2(x + 1, y);
+                    Vector2 p2 = new Vector2(x + 1, y + 1);
+                    Vector2 p3 = new Vector2(x, y + 1);
+
+                    switch (idx)
+                    {
+                        case 0:
+                        case 15:
+                            break;
+                        case 1:
+                            segments.Add((Interp(p0, p1, v0, v1), Interp(p0, p3, v0, v3)));
+                            break;
+                        case 2:
+                            segments.Add((Interp(p0, p1, v0, v1), Interp(p1, p2, v1, v2)));
+                            break;
+                        case 3:
+                            segments.Add((Interp(p0, p3, v0, v3), Interp(p1, p2, v1, v2)));
+                            break;
+                        case 4:
+                            segments.Add((Interp(p1, p2, v1, v2), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 5:
+                            segments.Add((Interp(p0, p1, v0, v1), Interp(p1, p2, v1, v2)));
+                            segments.Add((Interp(p0, p3, v0, v3), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 6:
+                            segments.Add((Interp(p0, p1, v0, v1), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 7:
+                            segments.Add((Interp(p0, p3, v0, v3), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 8:
+                            segments.Add((Interp(p2, p3, v2, v3), Interp(p0, p3, v0, v3)));
+                            break;
+                        case 9:
+                            segments.Add((Interp(p0, p1, v0, v1), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 10:
+                            segments.Add((Interp(p0, p3, v0, v3), Interp(p0, p1, v0, v1)));
+                            segments.Add((Interp(p1, p2, v1, v2), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 11:
+                            segments.Add((Interp(p1, p2, v1, v2), Interp(p2, p3, v2, v3)));
+                            break;
+                        case 12:
+                            segments.Add((Interp(p1, p2, v1, v2), Interp(p0, p1, v0, v1)));
+                            break;
+                        case 13:
+                            segments.Add((Interp(p2, p3, v2, v3), Interp(p0, p1, v0, v1)));
+                            break;
+                        case 14:
+                            segments.Add((Interp(p0, p3, v0, v3), Interp(p0, p1, v0, v1)));
+                            break;
+                    }
+                }
+            }
+
+            return BuildPolygonsFromSegments(segments);
+        }
+
         private static List<List<Vector2Int>> FindChains(List<Vector2Int> pixels)
         {
             var pixelSet = new HashSet<Vector2Int>(pixels);
             var visited = new HashSet<Vector2Int>();
             var chains = new List<List<Vector2Int>>();
-            Vector2Int[] ortho = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+            // Use 8-way connectivity so diagonally-connected edge pixels are treated as one chain.
+            // This prevents contours from breaking into multiple segments on high-resolution glyphs
+            // (e.g., the tail of a lowercase "g"), which caused simplification artifacts.
+            Vector2Int[] neighbors8 =
+            {
+                new Vector2Int(-1, 1), Vector2Int.up, new Vector2Int(1, 1),
+                Vector2Int.left,                    Vector2Int.right,
+                new Vector2Int(-1, -1), Vector2Int.down, new Vector2Int(1, -1)
+            };
 
             foreach (var start in pixels)
             {
@@ -232,7 +362,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 while (queue.Count > 0)
                 {
                     var current = queue.Dequeue();
-                    foreach (var dir in ortho)
+                    foreach (var dir in neighbors8)
                     {
                         var neighbor = current + dir;
                         if (pixelSet.Contains(neighbor) && !visited.Contains(neighbor))
@@ -487,6 +617,58 @@ namespace LanternPines.GlyphMesh3D.Generation
                 area -= polygon[next].x * polygon[i].y;
             }
             return area * 0.5f;
+        }
+
+        private static List<List<Vector2>> BuildPolygonsFromSegments(List<(Vector2 start, Vector2 end)> segments)
+        {
+            var polygons = new List<List<Vector2>>();
+            var remaining = new List<(Vector2 start, Vector2 end)>(segments);
+
+            bool Approximately(Vector2 a, Vector2 b)
+            {
+                return Vector2.SqrMagnitude(a - b) < 0.0001f;
+            }
+
+            while (remaining.Count > 0)
+            {
+                var seg = remaining[remaining.Count - 1];
+                remaining.RemoveAt(remaining.Count - 1);
+
+                var poly = new List<Vector2> { seg.start, seg.end };
+                Vector2 current = seg.end;
+                int guard = 0;
+
+                while (guard++ < 10000)
+                {
+                    int idx = remaining.FindIndex(s => Approximately(s.start, current));
+                    bool flipped = false;
+                    if (idx == -1)
+                    {
+                        idx = remaining.FindIndex(s => Approximately(s.end, current));
+                        flipped = true;
+                    }
+
+                    if (idx == -1) break;
+
+                    var next = remaining[idx];
+                    remaining.RemoveAt(idx);
+
+                    Vector2 nextPoint = flipped ? next.start : next.end;
+                    poly.Add(nextPoint);
+                    current = nextPoint;
+
+                    if (Approximately(current, poly[0]))
+                    {
+                        poly[poly.Count - 1] = poly[0];
+                        break;
+                    }
+                }
+
+                if (poly.Count >= 3)
+                    polygons.Add(poly);
+            }
+
+            return polygons;
         }
 
         #endregion
