@@ -876,7 +876,8 @@ namespace LanternPines.GlyphMesh3D.Core
                             float pixelsPerFontUnit = (maxY - minY) / glyph.metrics.height;
                             float baselinePixels = (glyph.metrics.height - glyph.metrics.horizontalBearingY) * pixelsPerFontUnit;
                             // Adjust for actual minY position and apply effectiveScale
-                            baselineOffset = (baselinePixels + minY) * effectiveScale;
+                            // NEGATIVE because we need to move DOWN for descenders (Unity Y+ is up)
+                            baselineOffset = -(baselinePixels + minY) * effectiveScale;
                         }
                     }
 
