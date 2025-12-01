@@ -524,11 +524,16 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private float GetLineAdvance()
         {
-            float baseLineHeight = (asset != null && asset.fontAsset != null)
-                ? asset.fontAsset.faceInfo.lineHeight
-                : 1f;
+            if (asset != null && asset.fontAsset != null)
+            {
+                var faceInfo = asset.fontAsset.faceInfo;
+                float pointSize = Mathf.Approximately(faceInfo.pointSize, 0f) ? 1f : faceInfo.pointSize;
+                float normalizedLineHeight = faceInfo.lineHeight / pointSize;
 
-            return baseLineHeight * (1f + lineSpacing);
+                return normalizedLineHeight * (1f + lineSpacing);
+            }
+
+            return (1f + lineSpacing);
         }
 
         private float GetAdvanceMultiplier(char character)
