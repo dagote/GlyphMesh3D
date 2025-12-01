@@ -262,8 +262,13 @@ namespace LanternPines.GlyphMesh3D.Core
             {
                 char c = text[i];
 
-                if (c == '\n')
+                if (IsNewLineCharacter(c))
                 {
+                    if (IsCarriageReturnFollowedByLineFeed(text, i))
+                    {
+                        i++;
+                    }
+
                     currentXOffset = 0f;
                     currentYOffset -= lineAdvance;
                     continue;
@@ -372,10 +377,17 @@ namespace LanternPines.GlyphMesh3D.Core
             var glyphsToRender = new List<(GlyphMeshData data, Vector3 position)>();
 
             // Process each character in the text
-            foreach (char c in text)
+            for (int i = 0; i < text.Length; i++)
             {
-                if (c == '\n')
+                char c = text[i];
+
+                if (IsNewLineCharacter(c))
                 {
+                    if (IsCarriageReturnFollowedByLineFeed(text, i))
+                    {
+                        i++;
+                    }
+
                     currentXOffset = 0f;
                     currentYOffset -= lineAdvance;
                     continue;
@@ -529,6 +541,16 @@ namespace LanternPines.GlyphMesh3D.Core
             }
 
             return advanceMultiplier;
+        }
+
+        private static bool IsNewLineCharacter(char character)
+        {
+            return character == '\n' || character == '\r';
+        }
+
+        private static bool IsCarriageReturnFollowedByLineFeed(string value, int index)
+        {
+            return value[index] == '\r' && index + 1 < value.Length && value[index + 1] == '\n';
         }
 
         /// <summary>
