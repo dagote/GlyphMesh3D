@@ -104,7 +104,11 @@ namespace LanternPines.GlyphMesh3D.Generation
                 {
                     if (i == j) continue;
                     if (areas[j] <= areas[i]) continue;
-                    if (IsPointInPolygon(centroids[i], boundaries[j]))
+
+                    bool isInside = IsPointInPolygon(centroids[i], boundaries[j]);
+                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}, centroid={centroids[i]}) is inside boundary {j} (area={areas[j]:F2}): {isInside}");
+
+                    if (isInside)
                     {
                         if (areas[j] < bestArea)
                         {
@@ -114,6 +118,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                     }
                 }
                 parent[i] = best;
+                Debug.Log($"  Boundary {i} parent = {best}");
             }
 
             for (int i = 0; i < n; i++)
