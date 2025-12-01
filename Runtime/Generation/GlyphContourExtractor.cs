@@ -217,7 +217,16 @@ namespace LanternPines.GlyphMesh3D.Generation
             var pixelSet = new HashSet<Vector2Int>(pixels);
             var visited = new HashSet<Vector2Int>();
             var chains = new List<List<Vector2Int>>();
-            Vector2Int[] ortho = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+            // Use 8-way connectivity so diagonally-connected edge pixels are treated as one chain.
+            // This prevents contours from breaking into multiple segments on high-resolution glyphs
+            // (e.g., the tail of a lowercase "g"), which caused simplification artifacts.
+            Vector2Int[] neighbors8 =
+            {
+                new Vector2Int(-1, 1), Vector2Int.up, new Vector2Int(1, 1),
+                Vector2Int.left,                    Vector2Int.right,
+                new Vector2Int(-1, -1), Vector2Int.down, new Vector2Int(1, -1)
+            };
 
             foreach (var start in pixels)
             {
@@ -232,7 +241,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 while (queue.Count > 0)
                 {
                     var current = queue.Dequeue();
-                    foreach (var dir in ortho)
+                    foreach (var dir in neighbors8)
                     {
                         var neighbor = current + dir;
                         if (pixelSet.Contains(neighbor) && !visited.Contains(neighbor))
