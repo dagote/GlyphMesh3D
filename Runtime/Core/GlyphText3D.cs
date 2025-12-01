@@ -24,13 +24,19 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("The text to display using the asset's glyphs")]
         public string text = "Sample";
 
+        [Tooltip("Font size in points, following TextMeshPro scaling conventions (36pt ≈ 1 unit cap height)")]
+        public float fontSize = 36f;
+
         // Cached components
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
 
+        private const float UnitsPerPoint = 1f / 36f;
+
         // Track previous state for change detection
         private string previousText;
         private GlyphText3DAsset previousAsset;
+        private float previousFontSize = 36f;
 
         // Track instantiated character GameObjects
         private List<GameObject> instantiatedGlyphs = new List<GameObject>();
@@ -79,12 +85,13 @@ namespace LanternPines.GlyphMesh3D.Core
             #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                if (text != previousText || asset != previousAsset)
+                if (text != previousText || asset != previousAsset || !Mathf.Approximately(fontSize, previousFontSize))
                 {
                     Debug.Log($"GlyphText3D.Update: Text changed from '{previousText}' to '{text}'");
                     RegenerateMeshFromAsset();
                     previousText = text;
                     previousAsset = asset;
+                    previousFontSize = fontSize;
                 }
             }
             #endif
@@ -93,12 +100,13 @@ namespace LanternPines.GlyphMesh3D.Core
         private void OnValidate()
         {
             // Detect changes and regenerate
-            if (text != previousText || asset != previousAsset)
+            if (text != previousText || asset != previousAsset || !Mathf.Approximately(fontSize, previousFontSize))
             {
                 Debug.Log($"GlyphText3D.OnValidate: Text changed from '{previousText}' to '{text}'");
                 RegenerateMeshFromAsset();
                 previousText = text;
                 previousAsset = asset;
+                previousFontSize = fontSize;
             }
         }
 
@@ -187,6 +195,10 @@ namespace LanternPines.GlyphMesh3D.Core
 
             // Clear any leftover individual glyphs from previous mode
             ClearInstantiatedGlyphs();
+
+            previousText = text;
+            previousAsset = asset;
+            previousFontSize = fontSize;
         }
 
         /// <summary>
@@ -198,6 +210,7 @@ namespace LanternPines.GlyphMesh3D.Core
             // Incremental update: only add/remove glyphs that changed
             int targetGlyphCount = 0;
             float currentXOffset = 0f;
+            float scale = fontSize * UnitsPerPoint;
 
             // First pass: count how many glyphs we need and update positions
             for (int i = 0; i < text.Length; i++)
@@ -220,7 +233,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     if (glyphData.mesh != null)
                     {
                         existingGlyph.name = $"Glyph_{c}";
-                        existingGlyph.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
+                        existingGlyph.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f);
 
                         MeshFilter glyphMeshFilter = existingGlyph.GetComponent<MeshFilter>();
                         if (glyphMeshFilter.sharedMesh != glyphData.mesh)
@@ -241,7 +254,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
                         GameObject glyphObject = new GameObject($"Glyph_{c}");
                         glyphObject.transform.SetParent(transform, false);
-                        glyphObject.transform.localPosition = new Vector3(currentXOffset, 0f, 0f);
+                        glyphObject.transform.localPosition = new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f);
 
                         MeshFilter glyphMeshFilter = glyphObject.AddComponent<MeshFilter>();
                         MeshRenderer glyphMeshRenderer = glyphObject.AddComponent<MeshRenderer>();
@@ -296,6 +309,7 @@ namespace LanternPines.GlyphMesh3D.Core
         /// </summary>
         private Mesh BuildCombinedMesh()
         {
+            float scale = fontSize * UnitsPerPoint;
             float currentXOffset = 0f;
             int processedGlyphs = 0;
 
@@ -329,7 +343,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
                 // Store this glyph and its position
                 // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
-                glyphsToRender.Add((glyphData, new Vector3(currentXOffset + glyphData.bearingX, glyphData.baselineOffset, 0f)));
+                glyphsToRender.Add((glyphData, new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f)));
 
                 // Advance position using stored advance width from asset
                 currentXOffset += glyphData.advanceWidth;
@@ -376,7 +390,7 @@ namespace LanternPines.GlyphMesh3D.Core
                 var vertices = glyphMesh.vertices;
                 for (int i = 0; i < vertices.Length; i++)
                 {
-                    allVertices.Add(vertices[i] + position);
+                    allVertices.Add(vertices[i] * scale + position);
                 }
 
                 // Add normals

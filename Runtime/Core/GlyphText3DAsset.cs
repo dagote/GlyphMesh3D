@@ -34,9 +34,6 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Extrusion profile curve used during generation")]
         public AnimationCurve extrusionProfile;
 
-        [Tooltip("Text size used during generation")]
-        public float textSize;
-
         [Tooltip("Character spacing used during generation")]
         public float characterSpacing;
 

@@ -175,9 +175,6 @@ namespace LanternPines.GlyphMesh3D.Core
         [Header("Text Settings")]
         [SerializeField] private TMP_FontAsset fontAsset;
         [SerializeField] private string text = "Sample Text";
-        [Range(1f, 500f)]
-        [Tooltip("Size of the generated text. Default 100 represents the current generation scale.")]
-        [SerializeField] private float textSize = 100f;
         [Range(0f, 250f)]
         [Tooltip("Gap between characters in world units. Added directly to each character's mesh width.")]
         [SerializeField] private float characterSpacing = 1f;
@@ -262,7 +259,6 @@ namespace LanternPines.GlyphMesh3D.Core
 
             // Set default values
             glyphText.text = "Sample Text";
-            glyphText.textSize = 100f;
             glyphText.characterSpacing = 1f;
             glyphText.extrusionDepth = 20f;
             glyphText.simplifyArcLength = 1.5f;
@@ -428,6 +424,16 @@ namespace LanternPines.GlyphMesh3D.Core
             float xOffset = 0f;
             var allBoundaries = new List<List<Vector2>>();
 
+            float pixelsPerFontUnit;
+            float normalizationScale = CalculateNormalizationScale(out pixelsPerFontUnit);
+            float pixelsPerUnit = normalizationScale > 0f ? 1f / normalizationScale : 0f;
+            float spacingPixels = pixelsPerUnit * characterSpacing;
+
+            if (pixelsPerFontUnit <= 0f)
+            {
+                pixelsPerFontUnit = pixelsPerUnit > 0f ? pixelsPerUnit : 1f;
+            }
+
             // Extract contours for each character using helper
             var extractionSettings = new GlyphContourExtractor.ContourExtractionSettings(
                 simplifyArcLength, cornerAngleThreshold, postDpEpsilon);
@@ -457,8 +463,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Character width is the extent of its bounds
                     float charWidth = maxX - minX;
 
-                    // Add character width plus spacing, scaled by textSize
-                    xOffset = maxX + characterSpacing * (textSize / 100f);
+                    // Add character width plus spacing (spacing converted to pixel space)
+                    xOffset = maxX + spacingPixels;
                 }
                 else
                 {
@@ -468,7 +474,7 @@ namespace LanternPines.GlyphMesh3D.Core
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
-                            xOffset += (glyph.metrics.horizontalAdvance + characterSpacing) * (textSize / 100f);
+                            xOffset += (glyph.metrics.horizontalAdvance * pixelsPerFontUnit) + spacingPixels;
                         }
                     }
                 }
@@ -498,7 +504,7 @@ namespace LanternPines.GlyphMesh3D.Core
                     UVPadding = uvPadding,
                     UVResolution = uvResolution,
                     TexelsPerUnit = texelsPerUnit,
-                    TextSize = textSize
+                    Scale = normalizationScale
                 };
 
                 foreach (var group in groups)
@@ -608,6 +614,47 @@ namespace LanternPines.GlyphMesh3D.Core
                 DestroyImmediate(mesh);
         }
 
+        private float CalculateNormalizationScale(out float pixelsPerFontUnit)
+        {
+            pixelsPerFontUnit = GetPixelsPerFontUnit();
+
+            float capHeight = fontAsset != null ? fontAsset.faceInfo.capLine : 0f;
+            if (capHeight <= 0f && fontAsset != null)
+            {
+                capHeight = fontAsset.faceInfo.ascentLine;
+            }
+
+            if (capHeight > 0f && pixelsPerFontUnit > 0f)
+            {
+                return 1f / (capHeight * pixelsPerFontUnit);
+            }
+
+            if (pixelsPerFontUnit <= 0f)
+            {
+                pixelsPerFontUnit = 1f;
+            }
+
+            return 1f;
+        }
+
+        private float GetPixelsPerFontUnit()
+        {
+            if (fontAsset == null || fontAsset.glyphTable == null)
+            {
+                return 0f;
+            }
+
+            foreach (var glyph in fontAsset.glyphTable)
+            {
+                if (glyph.metrics.height > 0f && glyph.glyphRect.height > 0)
+                {
+                    return glyph.glyphRect.height / glyph.metrics.height;
+                }
+            }
+
+            return 0f;
+        }
+
         private void OnDestroy()
         {
             ClearMesh();
@@ -643,7 +690,6 @@ namespace LanternPines.GlyphMesh3D.Core
                 asset.postDpEpsilon = postDpEpsilon;
                 asset.extrusionDepth = extrusionDepth;
                 asset.extrusionWidth = extrusionWidth;
-                asset.textSize = textSize;
                 asset.characterSpacing = characterSpacing;
                 asset.useXAtlasUVUnwrapping = useXAtlasUVUnwrapping;
 
@@ -685,6 +731,15 @@ namespace LanternPines.GlyphMesh3D.Core
                 return;
             }
 
+            float pixelsPerFontUnit;
+            float normalizationScale = CalculateNormalizationScale(out pixelsPerFontUnit);
+            float pixelsPerUnit = normalizationScale > 0f ? 1f / normalizationScale : 0f;
+
+            if (pixelsPerFontUnit <= 0f)
+            {
+                pixelsPerFontUnit = pixelsPerUnit > 0f ? pixelsPerUnit : 1f;
+            }
+
             // Get ALL characters from the TMP font asset's character lookup table
             var allChars = new List<char>();
             foreach (var kvp in fontAsset.characterLookupTable)
@@ -714,7 +769,7 @@ namespace LanternPines.GlyphMesh3D.Core
                 UVPadding = uvPadding,
                 UVResolution = uvResolution,
                 TexelsPerUnit = texelsPerUnit,
-                TextSize = textSize
+                Scale = normalizationScale
             };
 
             // Store materials from generator
@@ -755,8 +810,8 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    float charWidth = maxX - minX;
-                    float charHeight = maxY - minY;
+                    float charWidth = (maxX - minX) * normalizationScale;
+                    float charHeight = (maxY - minY) * normalizationScale;
 
                     // Group boundaries and generate mesh
                     var groups = GlyphTriangulator.GroupBoundariesByOuter(boundaries);
@@ -805,13 +860,10 @@ namespace LanternPines.GlyphMesh3D.Core
                     var glyphMesh = new Mesh();
                     glyphMesh.name = $"Glyph_{c}_{(int)c}";
 
-                    // Calculate effective scale (same as used in mesh generation)
-                    float effectiveScale = 0.01f * (textSize / 100f);
-
                     // Normalize vertices to start at x=0 (subtract minX for consistent positioning)
                     // IMPORTANT: minX is in pixels, vertices are scaled - must scale minX too
                     var normalizedVertices = new Vector3[allVertices.Count];
-                    float scaledMinX = minX * effectiveScale;
+                    float scaledMinX = minX * normalizationScale;
                     for (int v = 0; v < allVertices.Count; v++)
                     {
                         normalizedVertices[v] = new Vector3(
@@ -845,11 +897,9 @@ namespace LanternPines.GlyphMesh3D.Core
 
                     glyphMesh.RecalculateBounds();
 
-                    // Use the actual mesh bounds width + characterSpacing (in units)
-                    // The mesh width is already in the correct scale from the mesh generation
-                    // Scale characterSpacing the same way as in preview (by effectiveScale)
+                    // Use the actual mesh bounds width + characterSpacing (in normalized units)
                     float meshWidth = glyphMesh.bounds.size.x;
-                    float scaledSpacing = characterSpacing * effectiveScale;
+                    float scaledSpacing = characterSpacing;
                     float advanceWidth = meshWidth + scaledSpacing;
 
                     // Get bearing offsets from font metrics
@@ -867,17 +917,16 @@ namespace LanternPines.GlyphMesh3D.Core
 
                             // Store bearing X (horizontal offset from origin to mesh placement)
                             // Since mesh is normalized to start at x=0, bearingX represents the offset from minX
-                            bearingX = (glyph.metrics.horizontalBearingX - minX) * effectiveScale;
+                            bearingX = (glyph.metrics.horizontalBearingX * pixelsPerFontUnit - minX) * normalizationScale;
 
                             // Store baseline offset (vertical position relative to baseline)
                             // Convert font metrics to pixel space using the extracted contour dimensions
                             // The baseline is at (height - bearingY) font units above the glyph bottom
                             // Scale factor from font units to pixels: (maxY - minY) / height
-                            float pixelsPerFontUnit = (maxY - minY) / glyph.metrics.height;
                             float baselinePixels = (glyph.metrics.height - glyph.metrics.horizontalBearingY) * pixelsPerFontUnit;
-                            // Adjust for actual minY position and apply effectiveScale
+                            // Adjust for actual minY position and apply normalization
                             // NEGATIVE because we need to move DOWN for descenders (Unity Y+ is up)
-                            baselineOffset = -(baselinePixels + minY) * effectiveScale;
+                            baselineOffset = -(baselinePixels + minY) * normalizationScale;
                         }
                     }
 
@@ -892,8 +941,8 @@ namespace LanternPines.GlyphMesh3D.Core
                     glyphData.bearingX = bearingX;
                     glyphData.baselineOffset = baselineOffset;
                     glyphData.bounds = new Bounds(
-                        new Vector3(charWidth / 2f, (minY + maxY) / 2f, -extrusionDepth / 2f),
-                        new Vector3(charWidth, charHeight, extrusionDepth)
+                        new Vector3(charWidth / 2f, ((minY + maxY) / 2f) * normalizationScale, -extrusionDepth * normalizationScale / 2f),
+                        new Vector3(charWidth, charHeight, extrusionDepth * normalizationScale)
                     );
 
                     glyphDataList.Add(glyphData);
@@ -914,11 +963,10 @@ namespace LanternPines.GlyphMesh3D.Core
                         {
                             // Use the glyph's width metric scaled by the same factor used in mesh generation
                             // Scale characterSpacing the same way as visible characters
-                            float effectiveScale = 0.01f * (textSize / 100f);
-                            float meshWidth = glyph.metrics.horizontalAdvance * effectiveScale;
-                            float scaledSpacing = characterSpacing * effectiveScale;
+                            float meshWidth = glyph.metrics.horizontalAdvance * pixelsPerFontUnit * normalizationScale;
+                            float scaledSpacing = characterSpacing;
                             glyphData.advanceWidth = meshWidth + scaledSpacing;
-                            glyphData.bearingX = glyph.metrics.horizontalBearingX * effectiveScale;
+                            glyphData.bearingX = glyph.metrics.horizontalBearingX * pixelsPerFontUnit * normalizationScale;
                             // For non-rendered characters like space, use 0 as baseline offset
                             // (they have no visual position, only spacing)
                             glyphData.baselineOffset = 0f;

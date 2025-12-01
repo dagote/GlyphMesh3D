@@ -10,8 +10,6 @@ namespace LanternPines.GlyphMesh3D.Generation
     /// </summary>
     public static class GlyphMeshBuilder
     {
-        private const float SCALE_FACTOR = 0.01f; // 1/100th scale
-
         /// <summary>
         /// Material slot mapping information
         /// </summary>
@@ -55,7 +53,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             public int UVPadding;
             public int UVResolution;
             public float TexelsPerUnit;
-            public float TextSize;
+            public float Scale;
 
             public MeshBuildSettings()
             {
@@ -63,7 +61,7 @@ namespace LanternPines.GlyphMesh3D.Generation
                 UVPadding = 4;
                 UVResolution = 1024;
                 TexelsPerUnit = 1.0f;
-                TextSize = 100f;
+                Scale = 1f;
             }
         }
 
@@ -130,8 +128,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
 
             // Correct triangle winding orders to ensure outward-facing normals
-            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
-            CorrectTriangleWindingOrders(allVertices, submeshData, settings.ExtrusionProfile?.extrusionDepth ?? 0f, effectiveScale);
+            CorrectTriangleWindingOrders(allVertices, submeshData, settings.ExtrusionProfile?.extrusionDepth ?? 0f, settings.Scale);
 
             // Re-assign corrected triangles to submeshes
             for (int slotIdx = 0; slotIdx < slotMap.TotalSlots; slotIdx++)
@@ -310,7 +307,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             var tracker = new VertexNormalTracker();
 
             // Calculate effective scale factor with text size
-            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
+            float effectiveScale = settings.Scale;
 
             // Only create front face vertices (no extrusion)
             foreach (var v in triangulation.SortedVertices)
@@ -403,7 +400,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             var tracker = new VertexNormalTracker();
 
             // Calculate effective scale factor with text size
-            float effectiveScale = SCALE_FACTOR * (settings.TextSize / 100f);
+            float effectiveScale = settings.Scale;
 
             // Build extrusion layers
             var layers = GlyphExtrusionProcessor.BuildExtrusionLayers(settings.ExtrusionProfile);
