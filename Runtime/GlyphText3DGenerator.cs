@@ -915,7 +915,7 @@ namespace LanternPines.GlyphMesh3D.Core
                             // Use the glyph's width metric scaled by the same factor used in mesh generation
                             // Scale characterSpacing the same way as visible characters
                             float effectiveScale = 0.01f * (textSize / 100f);
-                            float meshWidth = glyph.metrics.width * effectiveScale;
+                            float meshWidth = glyph.metrics.horizontalAdvance * effectiveScale;
                             float scaledSpacing = characterSpacing * effectiveScale;
                             glyphData.advanceWidth = meshWidth + scaledSpacing;
                             glyphData.bearingX = glyph.metrics.horizontalBearingX * effectiveScale;
