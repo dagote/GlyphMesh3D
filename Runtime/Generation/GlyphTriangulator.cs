@@ -66,7 +66,6 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"GlyphTriangulator: Triangulation failed - {ex.Message}");
                 return null;
             }
         }
@@ -84,8 +83,6 @@ namespace LanternPines.GlyphMesh3D.Generation
             int n = boundaries.Count;
             var areas = boundaries.Select(b => Mathf.Abs(GetSignedArea(b))).ToArray();
             var centroids = new Vector2[n];
-
-            Debug.Log($"GlyphTriangulator.GroupBoundariesByOuter: Processing {n} boundaries");
 
             // Use first vertex of each boundary instead of centroid for containment testing
             // Centroids can move outside the polygon after aggressive simplification
@@ -109,7 +106,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                     if (areas[j] <= areas[i]) continue;
 
                     bool isInside = IsPointInPolygon(testPoints[i], boundaries[j]);
-                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}, testPoint={testPoints[i]}) is inside boundary {j} (area={areas[j]:F2}): {isInside}");
 
                     if (isInside)
                     {
@@ -121,7 +117,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                     }
                 }
                 parent[i] = best;
-                Debug.Log($"  Boundary {i} parent = {best}");
             }
 
             for (int i = 0; i < n; i++)
@@ -137,7 +132,6 @@ namespace LanternPines.GlyphMesh3D.Generation
                         holeCount++;
                     }
                 }
-                Debug.Log($"  Group {groups.Count}: 1 outer (area={areas[i]:F2}) + {holeCount} holes");
                 groups.Add(group);
             }
             return groups;

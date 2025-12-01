@@ -86,19 +86,16 @@ namespace LanternPines.GlyphMesh3D.UV
     {
         if (atlasPtr == IntPtr.Zero)
         {
-            Debug.LogError("XAtlas: Atlas not initialized");
             return false;
         }
 
         if (vertices == null || vertices.Length == 0)
         {
-            Debug.LogError("XAtlas: Vertices array is null or empty");
             return false;
         }
 
         if (triangles == null || triangles.Length == 0 || triangles.Length % 3 != 0)
         {
-            Debug.LogError("XAtlas: Triangles array is null, empty, or not divisible by 3");
             return false;
         }
 
@@ -148,7 +145,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in AddMesh - {ex.Message}");
             return false;
         }
     }
@@ -161,7 +157,6 @@ namespace LanternPines.GlyphMesh3D.UV
     {
         if (atlasPtr == IntPtr.Zero)
         {
-            Debug.LogError("XAtlas: Atlas not initialized");
             return false;
         }
 
@@ -172,7 +167,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in ComputeCharts - {ex.Message}");
             return false;
         }
     }
@@ -185,7 +179,6 @@ namespace LanternPines.GlyphMesh3D.UV
     {
         if (atlasPtr == IntPtr.Zero)
         {
-            Debug.LogError("XAtlas: Atlas not initialized");
             return false;
         }
 
@@ -196,7 +189,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in PackCharts - {ex.Message}");
             return false;
         }
     }
@@ -222,7 +214,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in Normalize - {ex.Message}");
         }
     }
 
@@ -235,7 +226,6 @@ namespace LanternPines.GlyphMesh3D.UV
     {
         if (atlasPtr == IntPtr.Zero)
         {
-            Debug.LogError("XAtlas: Atlas not initialized");
             return null;
         }
 
@@ -244,7 +234,6 @@ namespace LanternPines.GlyphMesh3D.UV
             int vertexCount = xatlasGetVertexCount(atlasPtr, meshIndex);
             if (vertexCount <= 0)
             {
-                Debug.LogError($"XAtlas: Invalid vertex count {vertexCount} for mesh {meshIndex}");
                 return null;
             }
 
@@ -282,7 +271,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in GetUVs - {ex.Message}");
             return null;
         }
     }
@@ -353,7 +341,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in GetIndices - {ex.Message}");
             return null;
         }
     }
@@ -387,7 +374,6 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
-            Debug.LogError($"XAtlas: Exception in GetVertexReferences - {ex.Message}");
             return null;
         }
     }
@@ -433,19 +419,16 @@ namespace LanternPines.GlyphMesh3D.UV
 
                     if (!atlas.AddMesh(vertices, triangles, normals))
                     {
-                        Debug.LogWarning("XAtlasWrapper: Failed to add mesh");
                         return null;
                     }
 
                     if (!atlas.ComputeCharts())
                     {
-                        Debug.LogWarning("XAtlasWrapper: Failed to compute charts");
                         return null;
                     }
 
                     if (!atlas.PackCharts())
                     {
-                        Debug.LogWarning("XAtlasWrapper: Failed to pack charts");
                         return null;
                     }
 
@@ -454,7 +437,6 @@ namespace LanternPines.GlyphMesh3D.UV
                     Vector2[] uvs = atlas.GetUVs(0);
                     if (uvs == null || uvs.Length != vertices.Length)
                     {
-                        Debug.LogWarning($"XAtlasWrapper: UV count mismatch - expected {vertices.Length}, got {uvs?.Length ?? 0}");
                         return null;
                     }
 
@@ -463,7 +445,6 @@ namespace LanternPines.GlyphMesh3D.UV
             }
             catch (Exception ex)
             {
-                Debug.LogError($"XAtlasWrapper: Exception during UV generation - {ex.Message}");
                 return null;
             }
         }

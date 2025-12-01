@@ -343,7 +343,6 @@ namespace LanternPines.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"GlyphText3DGenerator: Failed to generate mesh - {ex.Message}");
                 ClearMesh();
             }
         }
@@ -930,9 +929,6 @@ namespace LanternPines.GlyphMesh3D.Core
                         }
                     }
 
-                    Debug.Log($"Generator: Glyph '{c}' - minY={minY:F1}, maxY={maxY:F1}, bearingY={bearingY:F1}, height={metricHeight:F1}");
-                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, advanceWidth={advanceWidth:F2}, bearingX={bearingX:F2}, baselineOffset={baselineOffset:F2}");
-
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
                     glyphData.character = c;
@@ -1218,7 +1214,6 @@ namespace LanternPines.GlyphMesh3D.Core
             EditorGUIUtility.PingObject(asset);
             Selection.activeObject = asset;
 
-            Debug.Log($"Generated GlyphText3DAsset with {asset.glyphMeshes?.Length ?? 0} glyphs at: {path}");
         }
     }
 #endif
