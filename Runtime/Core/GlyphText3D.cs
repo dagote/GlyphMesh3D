@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.TextCore;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -15,6 +17,14 @@ namespace LanternPines.GlyphMesh3D.Core
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     public class GlyphText3D : MonoBehaviour
     {
+        public enum TextWrappingMode
+        {
+            NoWrap,
+            Normal,
+            PreserveWhitespace,
+            PreserveWhitespaceNoWrap
+        }
+
         [Header("Asset Reference")]
         [Tooltip("The generated glyph asset containing pre-baked meshes and settings")]
         public GlyphText3DAsset asset;
@@ -27,9 +37,14 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Font size in points, following TextMeshPro scaling conventions (36pt ≈ 1 unit cap height)")]
         public float fontSize = 36f;
 
+        [Header("Layout")]
+        [Tooltip("How the text should wrap across multiple lines.")]
+        public TextWrappingMode wrappingMode = TextWrappingMode.NoWrap;
+
         // Cached components
         private MeshFilter meshFilter;
         private MeshRenderer meshRenderer;
+        private RectTransform rectTransform;
 
         private const float UnitsPerPoint = 1f / 36f;
 
@@ -45,7 +60,7 @@ namespace LanternPines.GlyphMesh3D.Core
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
         private static void CreateGlyphText3DObject()
         {
-            GameObject go = new GameObject("GlyphText3D");
+            GameObject go = new GameObject("GlyphText3D", typeof(RectTransform), typeof(MeshFilter), typeof(MeshRenderer));
             GlyphText3D component = go.AddComponent<GlyphText3D>();
 
             if (Selection.activeTransform != null)
@@ -75,6 +90,7 @@ namespace LanternPines.GlyphMesh3D.Core
         {
             meshFilter = GetComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
+            rectTransform = transform as RectTransform;
             RegenerateMeshFromAsset();
         }
 
@@ -99,6 +115,8 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void OnValidate()
         {
+            rectTransform = transform as RectTransform;
+
             // Detect changes and regenerate
             if (text != previousText || asset != previousAsset || !Mathf.Approximately(fontSize, previousFontSize))
             {
@@ -310,43 +328,88 @@ namespace LanternPines.GlyphMesh3D.Core
         private Mesh BuildCombinedMesh()
         {
             float scale = fontSize * UnitsPerPoint;
+            float maxLineWidth = GetMaxLineWidth(scale);
+            float lineHeight = GetLineHeight();
             float currentXOffset = 0f;
+            float currentYOffset = 0f;
             int processedGlyphs = 0;
+
+            bool allowWrap = wrappingMode == TextWrappingMode.Normal || wrappingMode == TextWrappingMode.PreserveWhitespace;
+            bool preserveWhitespace = wrappingMode == TextWrappingMode.PreserveWhitespace || wrappingMode == TextWrappingMode.PreserveWhitespaceNoWrap;
 
             // Collect glyph data and positions for all valid characters
             var glyphsToRender = new List<(GlyphMeshData data, Vector3 position)>();
 
-            // Process each character in the text
-            foreach (char c in text)
+            int index = 0;
+            while (index < text.Length)
             {
-                // Get glyph data for this character
-                GlyphMeshData glyphData = asset.GetGlyphData(c);
+                char currentChar = text[index];
 
-                if (glyphData == null)
+                if (currentChar == '\n')
                 {
-                    Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
+                    currentXOffset = 0f;
+                    currentYOffset -= lineHeight;
+                    index++;
                     continue;
                 }
 
-                processedGlyphs++;
+                int tokenEnd;
+                float tokenWidth = MeasureTokenWidth(text, index, out tokenEnd);
+                bool tokenIsWhitespace = char.IsWhiteSpace(currentChar) && currentChar != '\n';
 
-                // If this is an empty glyph (like space) or no mesh, just advance the position
-                if (glyphData.mesh == null)
+                bool shouldWrap = allowWrap && maxLineWidth < float.PositiveInfinity && currentXOffset > 0f && currentXOffset + tokenWidth > maxLineWidth;
+
+                if (shouldWrap)
                 {
-                    Debug.Log($"  Glyph '{c}': no mesh (space?), advanceWidth={glyphData.advanceWidth}");
+                    currentXOffset = 0f;
+                    currentYOffset -= lineHeight;
+
+                    if (!preserveWhitespace && tokenIsWhitespace)
+                    {
+                        index = tokenEnd;
+                        continue;
+                    }
+                }
+
+                for (int i = index; i < tokenEnd; i++)
+                {
+                    char c = text[i];
+
+                    if (c == '\n')
+                    {
+                        continue;
+                    }
+
+                    // Get glyph data for this character
+                    GlyphMeshData glyphData = asset.GetGlyphData(c);
+
+                    if (glyphData == null)
+                    {
+                        Debug.LogWarning($"GlyphText3D: Character '{c}' (code: {(int)c}) not found in asset. Skipping.");
+                        continue;
+                    }
+
+                    processedGlyphs++;
+
+                    // If this is an empty glyph (like space) or no mesh, just advance the position
+                    if (glyphData.mesh == null)
+                    {
+                        currentXOffset += glyphData.advanceWidth;
+                        continue;
+                    }
+
+                    Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
+                    Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, yOffset={currentYOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
+
+                    // Store this glyph and its position
+                    // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
+                    glyphsToRender.Add((glyphData, new Vector3((currentXOffset + glyphData.bearingX) * scale, (currentYOffset + glyphData.baselineOffset) * scale, 0f)));
+
+                    // Advance position using stored advance width from asset
                     currentXOffset += glyphData.advanceWidth;
-                    continue;
                 }
 
-                Debug.Log($"  Glyph '{c}': mesh={glyphData.mesh.name}, vertices={glyphData.mesh.vertexCount}, advanceWidth={glyphData.advanceWidth}");
-                Debug.Log($"  Positioning glyph '{c}' at xOffset={currentXOffset}, bearingX={glyphData.bearingX}, baselineOffset={glyphData.baselineOffset}, will advance by {glyphData.advanceWidth}");
-
-                // Store this glyph and its position
-                // Apply bearingX for horizontal positioning and baselineOffset for vertical positioning
-                glyphsToRender.Add((glyphData, new Vector3((currentXOffset + glyphData.bearingX) * scale, glyphData.baselineOffset * scale, 0f)));
-
-                // Advance position using stored advance width from asset
-                currentXOffset += glyphData.advanceWidth;
+                index = tokenEnd;
             }
 
             // If no meshes were added, return null
@@ -446,6 +509,107 @@ namespace LanternPines.GlyphMesh3D.Core
             Debug.Log($"GlyphText3D: Combined mesh has {mesh.vertexCount} vertices, {mesh.subMeshCount} submeshes, bounds = {mesh.bounds}");
 
             return mesh;
+        }
+
+        private float MeasureTokenWidth(string source, int startIndex, out int endIndex)
+        {
+            bool isWhitespace = char.IsWhiteSpace(source[startIndex]) && source[startIndex] != '\n';
+            float width = 0f;
+            int i = startIndex;
+
+            while (i < source.Length)
+            {
+                char c = source[i];
+                if (c == '\n') break;
+
+                bool currentWhitespace = char.IsWhiteSpace(c) && c != '\n';
+                if (currentWhitespace != isWhitespace)
+                    break;
+
+                GlyphMeshData glyphData = asset.GetGlyphData(c);
+                if (glyphData != null)
+                {
+                    width += glyphData.advanceWidth;
+                }
+
+                i++;
+            }
+
+            endIndex = i;
+            return width;
+        }
+
+        private float GetMaxLineWidth(float scale)
+        {
+            if (rectTransform != null && rectTransform.rect.width > 0f && scale > 0f)
+            {
+                return rectTransform.rect.width / scale;
+            }
+
+            return float.PositiveInfinity;
+        }
+
+        private float GetLineHeight()
+        {
+            if (asset == null) return 1f;
+
+            if (asset.lineHeight > 0f)
+                return asset.lineHeight;
+
+            float fontScale = EstimateFontScaleFromGlyphs();
+            if (asset.fontAsset != null && fontScale > 0f)
+            {
+                return asset.fontAsset.faceInfo.lineHeight * fontScale;
+            }
+
+            if (asset.glyphMeshes != null)
+            {
+                foreach (var glyph in asset.glyphMeshes)
+                {
+                    if (glyph.mesh != null)
+                    {
+                        return glyph.mesh.bounds.size.y + asset.characterSpacing;
+                    }
+                }
+            }
+
+            return 1f;
+        }
+
+        private float EstimateFontScaleFromGlyphs()
+        {
+            if (asset == null || asset.fontAsset == null || asset.glyphMeshes == null)
+                return 0f;
+
+            foreach (var glyphData in asset.glyphMeshes)
+            {
+                if (asset.fontAsset.characterLookupTable != null && asset.fontAsset.characterLookupTable.TryGetValue(glyphData.character, out TMP_Character character))
+                {
+                    Glyph glyph = character.glyph;
+                    if (glyph == null) continue;
+
+                    float metricsAdvance = glyph.metrics.horizontalAdvance;
+                    if (metricsAdvance <= Mathf.Epsilon) continue;
+
+                    float adjustedAdvance = glyphData.advanceWidth;
+                    if (!Mathf.Approximately(asset.characterSpacing, 0f))
+                    {
+                        adjustedAdvance -= asset.characterSpacing;
+                    }
+
+                    if (adjustedAdvance <= 0f)
+                    {
+                        adjustedAdvance = glyphData.advanceWidth;
+                    }
+
+                    if (adjustedAdvance > 0f)
+                    {
+                        return adjustedAdvance / metricsAdvance;
+                    }
+                }
+            }
+
+            return 0f;
         }
 
         /// <summary>

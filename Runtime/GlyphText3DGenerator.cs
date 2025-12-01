@@ -693,6 +693,17 @@ namespace LanternPines.GlyphMesh3D.Core
                 asset.characterSpacing = characterSpacing;
                 asset.useXAtlasUVUnwrapping = useXAtlasUVUnwrapping;
 
+                // Cache line height in normalized font units for runtime layout
+                float normalizationScale = CalculateNormalizationScale(out float pixelsPerFontUnit);
+                if (fontAsset != null && pixelsPerFontUnit > 0f)
+                {
+                    asset.lineHeight = fontAsset.faceInfo.lineHeight * pixelsPerFontUnit * normalizationScale;
+                }
+                else
+                {
+                    asset.lineHeight = 0f;
+                }
+
                 // Copy extrusion profile curve
                 if (extrusionProfile != null)
                 {

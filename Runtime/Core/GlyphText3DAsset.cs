@@ -47,6 +47,10 @@ namespace LanternPines.GlyphMesh3D.Core
         [Tooltip("Number of material slots used during generation")]
         public int materialSlotCount;
 
+        [Header("Font Metrics")]
+        [Tooltip("Pre-calculated line height in normalized font units")] 
+        public float lineHeight;
+
         [Header("Pre-Generated Glyph Data")]
         [Tooltip("All generated glyphs from the source text")]
         public GlyphMeshData[] glyphMeshes;
