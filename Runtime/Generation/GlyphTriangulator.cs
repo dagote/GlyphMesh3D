@@ -87,17 +87,6 @@ namespace LanternPines.GlyphMesh3D.Generation
 
             Debug.Log($"GlyphTriangulator.GroupBoundariesByOuter: Processing {n} boundaries");
 
-            // Use first vertex of each boundary instead of centroid for containment testing
-            // Centroids can move outside the polygon after aggressive simplification
-            var testPoints = new Vector2[n];
-            for (int i = 0; i < n; i++)
-            {
-                if (boundaries[i].Count > 0)
-                {
-                    testPoints[i] = boundaries[i][0];
-                }
-            }
-
             var parent = Enumerable.Repeat(-1, n).ToArray();
             for (int i = 0; i < n; i++)
             {
@@ -108,8 +97,27 @@ namespace LanternPines.GlyphMesh3D.Generation
                     if (i == j) continue;
                     if (areas[j] <= areas[i]) continue;
 
-                    bool isInside = IsPointInPolygon(testPoints[i], boundaries[j]);
-                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}, testPoint={testPoints[i]}) is inside boundary {j} (area={areas[j]:F2}): {isInside}");
+                    // Test multiple points from boundary i to see if it's inside boundary j
+                    // This is more robust than testing just one point (centroid or first vertex)
+                    int testCount = Mathf.Min(boundaries[i].Count, 5); // Test up to 5 points
+                    int insideCount = 0;
+
+                    for (int k = 0; k < testCount; k++)
+                    {
+                        // Sample points evenly distributed along the boundary
+                        int idx = (boundaries[i].Count * k) / testCount;
+                        Vector2 testPoint = boundaries[i][idx];
+
+                        if (IsPointInPolygon(testPoint, boundaries[j]))
+                        {
+                            insideCount++;
+                        }
+                    }
+
+                    // Majority voting: if most test points are inside, consider it contained
+                    bool isInside = insideCount > testCount / 2;
+
+                    Debug.Log($"  Testing if boundary {i} (area={areas[i]:F2}) is inside boundary {j} (area={areas[j]:F2}): {insideCount}/{testCount} points inside → {isInside}");
 
                     if (isInside)
                     {
