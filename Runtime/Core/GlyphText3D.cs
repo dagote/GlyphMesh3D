@@ -552,7 +552,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private float GetAdvanceMultiplier(char character)
         {
-            float advanceMultiplier = 1f + characterSpacing;
+            float advanceMultiplier = 1f + (asset != null ? asset.characterSpacing : 0f) + characterSpacing;
 
             if (character == ' ' || character == '\t')
             {
