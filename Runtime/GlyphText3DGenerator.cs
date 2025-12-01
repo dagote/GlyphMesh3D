@@ -855,22 +855,33 @@ namespace LanternPines.GlyphMesh3D.Core
                     // Get bearing offsets from font metrics
                     float bearingX = 0f;
                     float baselineOffset = 0f;
+                    float bearingY = 0f;
+                    float metricHeight = 0f;
                     if (fontAsset.characterLookupTable.TryGetValue(c, out TMPro.TMP_Character glyphChar))
                     {
                         var glyph = GetGlyph(glyphChar);
                         if (glyph != null)
                         {
+                            bearingY = glyph.metrics.horizontalBearingY;
+                            metricHeight = glyph.metrics.height;
+
                             // Store bearing X (horizontal offset from origin to mesh placement)
                             // Since mesh is normalized to start at x=0, bearingX represents the offset from minX
                             bearingX = (glyph.metrics.horizontalBearingX - minX) * effectiveScale;
 
                             // Store baseline offset (vertical position relative to baseline)
-                            // Use effectiveScale for consistency with mesh scaling
-                            baselineOffset = glyph.metrics.horizontalBearingY * effectiveScale;
+                            // Convert font metrics to pixel space using the extracted contour dimensions
+                            // The baseline is at (height - bearingY) font units above the glyph bottom
+                            // Scale factor from font units to pixels: (maxY - minY) / height
+                            float pixelsPerFontUnit = (maxY - minY) / glyph.metrics.height;
+                            float baselinePixels = (glyph.metrics.height - glyph.metrics.horizontalBearingY) * pixelsPerFontUnit;
+                            // Adjust for actual minY position and apply effectiveScale
+                            baselineOffset = (baselinePixels + minY) * effectiveScale;
                         }
                     }
 
-                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, scaledSpacing={scaledSpacing:F2}, advanceWidth={advanceWidth:F2}, bearingX={bearingX:F2}, baselineOffset={baselineOffset:F2}");
+                    Debug.Log($"Generator: Glyph '{c}' - minY={minY:F1}, maxY={maxY:F1}, bearingY={bearingY:F1}, height={metricHeight:F1}");
+                    Debug.Log($"Generator: Glyph '{c}' - meshWidth={meshWidth:F2}, advanceWidth={advanceWidth:F2}, bearingX={bearingX:F2}, baselineOffset={baselineOffset:F2}");
 
                     // Create GlyphMeshData
                     var glyphData = new GlyphMeshData();
@@ -907,7 +918,9 @@ namespace LanternPines.GlyphMesh3D.Core
                             float scaledSpacing = characterSpacing * effectiveScale;
                             glyphData.advanceWidth = meshWidth + scaledSpacing;
                             glyphData.bearingX = glyph.metrics.horizontalBearingX * effectiveScale;
-                            glyphData.baselineOffset = glyph.metrics.horizontalBearingY * effectiveScale;
+                            // For non-rendered characters like space, use 0 as baseline offset
+                            // (they have no visual position, only spacing)
+                            glyphData.baselineOffset = 0f;
                         }
                     }
 
