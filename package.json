@@ -2,7 +2,7 @@
   "name": "com.lanternpines.glyphmesh3d",
   "version": "0.0.1",
   "displayName": "GlyphMesh3D",
-  "description": "A Unity package for 3D glyph mesh generation and manipulation",
+  "description": "Unity package for generating extruded 3D meshes from text glyphs with customizable extrusion profiles, advanced UV mapping, and multi-material support",
   "unity": "2020.3",
   "keywords": [
     "3d",
