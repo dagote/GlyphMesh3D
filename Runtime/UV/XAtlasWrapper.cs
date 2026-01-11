@@ -145,6 +145,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to add mesh to xatlas: {ex.Message}");
             return false;
         }
     }
@@ -167,6 +168,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to compute UV charts: {ex.Message}");
             return false;
         }
     }
@@ -189,6 +191,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to pack UV charts: {ex.Message}");
             return false;
         }
     }
@@ -214,6 +217,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to normalize UVs: {ex.Message}");
         }
     }
 
@@ -271,6 +275,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to get UVs from xatlas: {ex.Message}");
             return null;
         }
     }
@@ -341,6 +346,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to get indices from xatlas: {ex.Message}");
             return null;
         }
     }
@@ -374,6 +380,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            Debug.LogWarning($"Failed to get vertex references from xatlas: {ex.Message}");
             return null;
         }
     }
@@ -445,6 +452,7 @@ namespace LanternPines.GlyphMesh3D.UV
             }
             catch (Exception ex)
             {
+                Debug.LogWarning($"Failed to generate glyph UVs with xatlas: {ex.Message}");
                 return null;
             }
         }

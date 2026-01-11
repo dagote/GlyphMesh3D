@@ -66,6 +66,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
             catch (System.Exception ex)
             {
+                Debug.LogWarning($"Triangulation failed: {ex.Message}");
                 return null;
             }
         }

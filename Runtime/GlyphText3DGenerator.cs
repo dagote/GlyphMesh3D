@@ -343,6 +343,7 @@ namespace LanternPines.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
+                Debug.LogError($"Error generating mesh for text: {ex.Message}", this);
                 ClearMesh();
             }
         }

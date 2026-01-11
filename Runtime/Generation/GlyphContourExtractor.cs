@@ -125,8 +125,9 @@ namespace LanternPines.GlyphMesh3D.Generation
                 Object.DestroyImmediate(readable);
                 return glyphTexture;
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
+                Debug.LogWarning($"Failed to extract glyph SDF texture: {ex.Message}");
                 return null;
             }
         }

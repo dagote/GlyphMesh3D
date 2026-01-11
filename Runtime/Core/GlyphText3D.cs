@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
-namespace dagote.ai.GlyphMesh3D.Core
+namespace LanternPines.GlyphMesh3D.Core
 {
     /// <summary>
     /// Runtime component that instantiates and positions 3D glyph meshes from a GlyphText3DAsset.
@@ -262,6 +262,7 @@ namespace dagote.ai.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
+                Debug.LogError($"Error regenerating mesh from asset: {ex.Message}", this);
                 ClearMesh();
             }
 
@@ -364,9 +365,6 @@ namespace dagote.ai.GlyphMesh3D.Core
                 }
 
                 // Advance position using stored advance width from asset
-                if (glyphData.mesh == null)
-                {
-                }
                 currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
 
