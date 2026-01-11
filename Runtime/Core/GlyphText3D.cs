@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
-namespace LanternPines.GlyphMesh3D.Core
+namespace DagoteAI.GlyphMesh3D.Core
 {
     /// <summary>
     /// Runtime component that instantiates and positions 3D glyph meshes from a GlyphText3DAsset.
@@ -64,9 +64,7 @@ namespace LanternPines.GlyphMesh3D.Core
 
 #if UNITY_EDITOR
         private bool validateScheduled;
-#endif
 
-#if UNITY_EDITOR
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
         private static void CreateGlyphText3DObject()
         {
@@ -94,6 +92,34 @@ namespace LanternPines.GlyphMesh3D.Core
                 }
             }
         }
+
+        private void QueueDelayedRegeneration()
+        {
+            if (validateScheduled)
+            {
+                return;
+            }
+
+            validateScheduled = true;
+            EditorApplication.delayCall += HandleDelayedRegeneration;
+        }
+
+        private void HandleDelayedRegeneration()
+        {
+            EditorApplication.delayCall -= HandleDelayedRegeneration;
+            validateScheduled = false;
+
+            if (this == null)
+            {
+                return;
+            }
+
+            if (HasChangedSinceLastRegeneration())
+            {
+                RegenerateMeshFromAsset();
+                CacheCurrentState();
+            }
+        }
 #endif
 
         private void OnEnable()
@@ -105,9 +131,9 @@ namespace LanternPines.GlyphMesh3D.Core
 
         private void Update()
         {
+#if UNITY_EDITOR
             // In edit mode, continuously check for text changes
             // OnValidate isn't always called for every character typed in TextArea
-#if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 if (HasChangedSinceLastRegeneration())
@@ -157,36 +183,6 @@ namespace LanternPines.GlyphMesh3D.Core
             previousLineSpacing = lineSpacing;
             previousParagraphSpacing = paragraphSpacing;
         }
-
-#if UNITY_EDITOR
-        private void QueueDelayedRegeneration()
-        {
-            if (validateScheduled)
-            {
-                return;
-            }
-
-            validateScheduled = true;
-            EditorApplication.delayCall += HandleDelayedRegeneration;
-        }
-
-        private void HandleDelayedRegeneration()
-        {
-            EditorApplication.delayCall -= HandleDelayedRegeneration;
-            validateScheduled = false;
-
-            if (this == null)
-            {
-                return;
-            }
-
-            if (HasChangedSinceLastRegeneration())
-            {
-                RegenerateMeshFromAsset();
-                CacheCurrentState();
-            }
-        }
-#endif
 
         /// <summary>
         /// Public API to update the displayed text.

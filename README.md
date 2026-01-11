@@ -35,14 +35,14 @@ Install directly from GitHub using Unity's Package Manager:
 2. Open Package Manager (Window > Package Manager)
 3. Click the `+` button in the top-left corner
 4. Select "Add package from git URL..."
-5. Enter: `https://github.com/CCoxLanternPines/GlyphMesh3D.git`
+5. Enter: `https://github.com/dagoteai/GlyphMesh3D.git`
 6. Click "Add"
 
 ### Install a Specific Version
 
 To install a specific version tag:
 ```
-https://github.com/CCoxLanternPines/GlyphMesh3D.git#v1.0.0
+https://github.com/dagoteai/GlyphMesh3D.git#v1.0.0
 ```
 
 ### Install via manifest.json
@@ -52,7 +52,7 @@ Add to your project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.lanternpines.glyphmesh3d": "https://github.com/CCoxLanternPines/GlyphMesh3D.git"
+    "com.dagote.glyphmesh3d": "https://github.com/dagoteai/GlyphMesh3D.git"
   }
 }
 ```
@@ -102,7 +102,7 @@ Add to your project's `Packages/manifest.json`:
 ### Example Script
 
 ```csharp
-using LanternPines.GlyphMesh3D.Core;
+using DagoteAI.GlyphMesh3D.Core;
 using UnityEngine;
 
 public class Example : MonoBehaviour
@@ -138,6 +138,15 @@ Runtime/
 
 For detailed architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## Known Issues
+
+- **Font Compatibility**: Some fonts don't generate correctly or produce unexpected results. Testing with different font assets is recommended.
+- **High-Resolution Generation Lag**: Generating 3D glyph maps with high resolution causes significant performance lag during the generation process.
+- **Low-Resolution Breakdown**: Very low resolution 2D glyph maps can break the 3D generation pipeline, resulting in malformed geometry.
+- **Character Spacing**: Spacing between characters sometimes breaks, particularly with certain font and configuration combinations.
+- **Extrusion Weight Normalization**: Extrusion weights are not normalized correctly, which can lead to inconsistent depth distribution.
+- **General Stability**: Various bugs and improvements are needed. The package is functional for most use cases but may encounter edge cases.
+
 ## Documentation
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)**: Detailed technical architecture and design patterns
@@ -150,6 +159,6 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Author
 
-**Lantern Pines**
-- Email: ops@lanternpines.com
-- GitHub: [@CCoxLanternPines](https://github.com/CCoxLanternPines)
+**DagoteAI**
+- Email: contact@dagote.ai
+- GitHub: [@dagoteai](https://github.com/dagoteai)
