@@ -64,9 +64,7 @@ namespace DagoteAI.GlyphMesh3D.Core
 
 #if UNITY_EDITOR
         private bool validateScheduled;
-#endif
 
-#if UNITY_EDITOR
         [MenuItem("GameObject/3D Object/Glyph Text 3D")]
         private static void CreateGlyphText3DObject()
         {
@@ -94,6 +92,34 @@ namespace DagoteAI.GlyphMesh3D.Core
                 }
             }
         }
+
+        private void QueueDelayedRegeneration()
+        {
+            if (validateScheduled)
+            {
+                return;
+            }
+
+            validateScheduled = true;
+            EditorApplication.delayCall += HandleDelayedRegeneration;
+        }
+
+        private void HandleDelayedRegeneration()
+        {
+            EditorApplication.delayCall -= HandleDelayedRegeneration;
+            validateScheduled = false;
+
+            if (this == null)
+            {
+                return;
+            }
+
+            if (HasChangedSinceLastRegeneration())
+            {
+                RegenerateMeshFromAsset();
+                CacheCurrentState();
+            }
+        }
 #endif
 
         private void OnEnable()
@@ -105,9 +131,9 @@ namespace DagoteAI.GlyphMesh3D.Core
 
         private void Update()
         {
+#if UNITY_EDITOR
             // In edit mode, continuously check for text changes
             // OnValidate isn't always called for every character typed in TextArea
-            #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 if (HasChangedSinceLastRegeneration())
@@ -116,18 +142,18 @@ namespace DagoteAI.GlyphMesh3D.Core
                     CacheCurrentState();
                 }
             }
-            #endif
+#endif
         }
 
         private void OnValidate()
         {
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 QueueDelayedRegeneration();
                 return;
             }
-            #endif
+#endif
 
             // Detect changes and regenerate
             if (HasChangedSinceLastRegeneration())
@@ -157,36 +183,6 @@ namespace DagoteAI.GlyphMesh3D.Core
             previousLineSpacing = lineSpacing;
             previousParagraphSpacing = paragraphSpacing;
         }
-
-#if UNITY_EDITOR
-        private void QueueDelayedRegeneration()
-        {
-            if (validateScheduled)
-            {
-                return;
-            }
-
-            validateScheduled = true;
-            EditorApplication.delayCall += HandleDelayedRegeneration;
-        }
-
-        private void HandleDelayedRegeneration()
-        {
-            EditorApplication.delayCall -= HandleDelayedRegeneration;
-            validateScheduled = false;
-
-            if (this == null)
-            {
-                return;
-            }
-
-            if (HasChangedSinceLastRegeneration())
-            {
-                RegenerateMeshFromAsset();
-                CacheCurrentState();
-            }
-        }
-#endif
 
         /// <summary>
         /// Public API to update the displayed text.
@@ -262,6 +258,7 @@ namespace DagoteAI.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
+                // Mesh generation failed - clear to prevent partial/corrupted mesh display
                 ClearMesh();
             }
 
@@ -364,9 +361,6 @@ namespace DagoteAI.GlyphMesh3D.Core
                 }
 
                 // Advance position using stored advance width from asset
-                if (glyphData.mesh == null)
-                {
-                }
                 currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
 

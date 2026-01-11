@@ -343,6 +343,7 @@ namespace LanternPines.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
+                // Mesh generation failed - clear to prevent partial/corrupted mesh display
                 ClearMesh();
             }
         }

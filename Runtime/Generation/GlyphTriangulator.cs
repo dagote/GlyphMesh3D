@@ -66,6 +66,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
             catch (System.Exception ex)
             {
+                // Triangulation failed - return null to indicate failure
                 return null;
             }
         }
