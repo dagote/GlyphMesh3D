@@ -127,6 +127,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
             catch (System.Exception)
             {
+                // Texture read/blit failed - return null to indicate failure
                 return null;
             }
         }
@@ -177,6 +178,7 @@ namespace LanternPines.GlyphMesh3D.Generation
             }
             catch (System.Exception)
             {
+                // Texture read/blit failed - return empty list to indicate failure
                 return new List<Vector2Int>();
             }
         }

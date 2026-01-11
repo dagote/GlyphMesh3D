@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
+
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 
 namespace LanternPines.GlyphMesh3D.Visualization
 {
@@ -34,6 +37,7 @@ namespace LanternPines.GlyphMesh3D.Visualization
         [ContextMenu("Generate UV Map")]
         public void GenerateUVMap()
         {
+#if UNITY_EDITOR
             if (meshFilter == null || meshFilter.sharedMesh == null)
             {
                 return;
@@ -55,6 +59,7 @@ namespace LanternPines.GlyphMesh3D.Visualization
 
             SaveUVMap(uvTexture);
             DestroyImmediate(uvTexture);
+#endif
         }
 
         private void ClearTexture(Texture2D texture, Color color)
@@ -124,12 +129,14 @@ namespace LanternPines.GlyphMesh3D.Visualization
 
         private void SaveUVMap(Texture2D texture)
         {
+#if UNITY_EDITOR
             string path = EditorUtility.SaveFilePanel("Save UV Map", "Assets", "UVMap", uvMapFormat.ToString().ToLower());
             if (string.IsNullOrEmpty(path)) return;
 
             byte[] bytes = uvMapFormat == UVMapFormat.PNG ? texture.EncodeToPNG() : texture.EncodeToJPG();
             System.IO.File.WriteAllBytes(path, bytes);
             AssetDatabase.Refresh();
+#endif
         }
     }
 }

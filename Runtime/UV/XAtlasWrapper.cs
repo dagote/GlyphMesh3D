@@ -11,7 +11,7 @@ namespace LanternPines.GlyphMesh3D.UV
     /// Enhanced wrapper with simplified API for glyph mesh UV generation.
     /// </summary>
     public class XAtlasWrapper : IDisposable
-{
+    {
     private IntPtr atlasPtr = IntPtr.Zero;
     private bool isDisposed = false;
 
@@ -145,6 +145,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Native call failed - return false to indicate failure
             return false;
         }
     }
@@ -167,6 +168,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Parametrization failed - return false to indicate failure
             return false;
         }
     }
@@ -189,6 +191,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Packing failed - return false to indicate failure
             return false;
         }
     }
@@ -214,6 +217,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Normalization failed - non-critical, continue without normalization
         }
     }
 
@@ -271,6 +275,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Failed to retrieve UV data from native library - return null to indicate failure
             return null;
         }
     }
@@ -341,6 +346,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Failed to retrieve index data from native library - return null to indicate failure
             return null;
         }
     }
@@ -374,6 +380,7 @@ namespace LanternPines.GlyphMesh3D.UV
         }
         catch (Exception ex)
         {
+            // Failed to retrieve vertex reference data from native library - return null to indicate failure
             return null;
         }
     }
@@ -445,6 +452,7 @@ namespace LanternPines.GlyphMesh3D.UV
             }
             catch (Exception ex)
             {
+                // UV generation failed - return null to indicate failure
                 return null;
             }
         }

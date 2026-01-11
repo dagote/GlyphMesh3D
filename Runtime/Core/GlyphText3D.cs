@@ -107,7 +107,7 @@ namespace LanternPines.GlyphMesh3D.Core
         {
             // In edit mode, continuously check for text changes
             // OnValidate isn't always called for every character typed in TextArea
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 if (HasChangedSinceLastRegeneration())
@@ -116,18 +116,18 @@ namespace LanternPines.GlyphMesh3D.Core
                     CacheCurrentState();
                 }
             }
-            #endif
+#endif
         }
 
         private void OnValidate()
         {
-            #if UNITY_EDITOR
+#if UNITY_EDITOR
             if (!Application.isPlaying)
             {
                 QueueDelayedRegeneration();
                 return;
             }
-            #endif
+#endif
 
             // Detect changes and regenerate
             if (HasChangedSinceLastRegeneration())
@@ -262,6 +262,7 @@ namespace LanternPines.GlyphMesh3D.Core
             }
             catch (System.Exception ex)
             {
+                // Mesh generation failed - clear to prevent partial/corrupted mesh display
                 ClearMesh();
             }
 
@@ -364,9 +365,6 @@ namespace LanternPines.GlyphMesh3D.Core
                 }
 
                 // Advance position using stored advance width from asset
-                if (glyphData.mesh == null)
-                {
-                }
                 currentXOffset += glyphData.advanceWidth * GetAdvanceMultiplier(c);
             }
 
