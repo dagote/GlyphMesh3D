@@ -1,6 +1,6 @@
 {
-  "name": "com.lanternpines.glyphmesh3d.runtime",
-  "rootNamespace": "LanternPines.GlyphMesh3D",
+  "name": "com.dagote.glyphmesh3d.runtime",
+  "rootNamespace": "DagoteAI.GlyphMesh3D",
   "references": [
     "Unity.TextMeshPro"
   ],

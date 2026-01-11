@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
-namespace LanternPines.GlyphMesh3D.Core
+namespace DagoteAI.GlyphMesh3D.Core
 {
     /// <summary>
     /// Runtime component that instantiates and positions 3D glyph meshes from a GlyphText3DAsset.
