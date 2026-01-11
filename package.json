@@ -1,5 +1,5 @@
 {
-  "name": "com.lanternpines.glyphmesh3d",
+  "name": "com.dagoteai.glyphmesh3d",
   "version": "0.0.1",
   "displayName": "GlyphMesh3D",
   "description": "Unity package for generating extruded 3D meshes from text glyphs with customizable extrusion profiles, advanced UV mapping, and multi-material support",
@@ -12,13 +12,13 @@
     "graphics"
   ],
   "author": {
-    "name": "Lantern Pines",
-    "email": "ops@lanternpines.com",
-    "url": "https://github.com/CCoxLanternPines"
+    "name": "dagote.ai",
+    "email": "ops@dagote.ai",
+    "url": "https://github.com/dagoteai"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/CCoxLanternPines/GlyphMesh3D.git"
+    "url": "https://github.com/dagoteai/GlyphMesh3D.git"
   },
   "license": "MIT",
   "dependencies": {

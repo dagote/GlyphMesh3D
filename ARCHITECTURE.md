@@ -149,7 +149,7 @@ Example with 3 keyframes:
 ## Namespace Organization
 
 ```
-LanternPines.GlyphMesh3D
+dagote.ai.GlyphMesh3D
 ├── Core                    # Core components
 ├── Generation              # Mesh generation helpers
 ├── UV                      # UV mapping utilities

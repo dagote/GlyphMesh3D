@@ -1,0 +1,21 @@
+GlyphMesh3D is a Unity package for generating 3D text meshes from TrueType and OpenType fonts. It converts text into three-dimensional geometry that you can render, light, and integrate into your game or application.
+
+Here's how it works. The process starts with creating a new asset. You open the tool in Unity and create a GlyphText3D Asset. This container holds all your settings—the font you've selected, the characters you want to generate, the depth of the extrusion, and other customization parameters.
+
+Next, you configure the mesh. You select your font from any available TextMeshPro font asset. You specify which characters to generate. You set the extrusion depth, controlling how thick the 3D geometry will be. You can use curves to adjust the extrusion profile, creating tapered effects or varying the scale across the depth. You choose your UV mapping method, which determines how textures wrap around the geometry.
+
+When you're ready, you generate the mesh. The system extracts the contour of each character from the font atlas. It triangulates the 2D shape into thousands of small triangles. It extrudes this triangulated surface according to your specified profile. It applies UV coordinates so materials render correctly on all surfaces.
+
+The result is a baked mesh stored in your GlyphText3D Asset. This is a finalized, optimized 3D object ready for use. You can reuse this asset throughout your project or create variations.
+
+At runtime, you instantiate the asset in your scene. You create a GlyphText3D component, assign your generated asset to it, set the text content you want to display, and play your scene. The 3D text renders as a standard mesh object, performing efficiently without any runtime generation overhead.
+
+The technical architecture is clean and modular. The Glyph Contour Extractor reads glyph shapes from the font atlas. The Glyph Triangulator converts 2D contours into triangle meshes using Delaunay triangulation. The Glyph Extrusion Processor generates the 3D geometry with proper normals and applies your custom depth profile. The UV mappers handle texture coordinate generation, supporting both xAtlas integration for advanced unwrapping and traditional projection methods like planar and cylindrical mapping. The Glyph Mesh Builder orchestrates all these steps into a single pipeline. Results are stored in the Glyph Text 3D Asset, and the runtime component instantiates them in your scenes.
+
+The main advantage is baked generation. All computation happens upfront during asset creation. At runtime, your game simply renders pre-computed meshes. There's no triangulation happening during gameplay, no runtime overhead. Just rendering.
+
+You can apply different materials to different parts of the geometry—separate materials for front and back faces, and different materials for each extrusion band if needed. This allows for complex visual effects like gradients, chrome finishes, or shadow effects across the depth of the text.
+
+The system supports Unity 2020.3 and later with TextMeshPro 3.0.6 and newer. It uses TriangleNet for triangulation, xAtlas for UV unwrapping, and is implemented entirely in C sharp.
+
+GlyphMesh3D automates the process of creating 3D text geometry. Rather than manually modeling each character or hiring 3D artists, you configure a few parameters and generate production-quality 3D text in seconds. The results are optimized for performance and ready to integrate into your project.
